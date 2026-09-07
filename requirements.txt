@@ -1,9 +1,8 @@
-streamlit 
-pandas 
-openpyxl 
-geopy 
-pytz 
-opencv-python-headless 
-streamlit-geolocation 
-face-recognition
+pandas
+numpy
+pytz
+geopy
+streamlit-geolocation
+openpyxl
 Pillow
+face-recognition
