@@ -287,13 +287,30 @@ def admin_dashboard():
     # --- MENU DATA SEKOLAH ---
     elif choice == "Data Sekolah":
         st.header("Data Profil & Koordinat Sekolah")
+        
         if role == "ADMIN_SEKOLAH":
             sch_idx = st.session_state.schools[st.session_state.schools['id'] == school_id].index[0]
             sch = st.session_state.schools.loc[sch_idx]
             
-            st.text_input("Nama Sekolah", value=sch['school_name'], disabled=True)
-            st.text_input("NPSN", value=sch['npsn'], disabled=True)
+            st.subheader("Ubah Profil Sekolah")
+            with st.form("form_edit_sekolah"):
+                new_school_name = st.text_input("Nama Sekolah", value=sch['school_name'])
+                new_npsn = st.text_input("NPSN", value=sch['npsn'])
+                new_address = st.text_area("Alamat Sekolah", value=sch['address'])
+                new_kepsek = st.text_input("Nama Kepala Sekolah", value=sch['headmaster_name'])
+                new_nip_kepsek = st.text_input("NIP Kepala Sekolah", value=sch['headmaster_nip'])
+                
+                submit_profile = st.form_submit_button("Simpan Perubahan Profil")
+                
+                if submit_profile:
+                    st.session_state.schools.loc[sch_idx, 'school_name'] = new_school_name
+                    st.session_state.schools.loc[sch_idx, 'npsn'] = new_npsn
+                    st.session_state.schools.loc[sch_idx, 'address'] = new_address
+                    st.session_state.schools.loc[sch_idx, 'headmaster_name'] = new_kepsek
+                    st.session_state.schools.loc[sch_idx, 'headmaster_nip'] = new_nip_kepsek
+                    st.success("Profil sekolah berhasil diperbarui!")
             
+            st.write("---")
             st.subheader("Titik Koordinat Lokasi Absensi")
             if sch['is_coordinate_locked']:
                 st.text_input("Latitude", value=sch['lat'], disabled=True)
