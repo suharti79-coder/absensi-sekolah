@@ -210,29 +210,79 @@ def admin_dashboard():
     elif choice == "Data Pegawai":
         st.header("Kelola Data Tenaga Pendidik & Kependidikan")
         
-        if role == "ADMIN_SEKOLAH":
-            emp_filtered = st.session_state.employees[st.session_state.employees['school_id'] == school_id]
-        else:
-            emp_filtered = st.session_state.employees
-            
-        st.dataframe(emp_filtered[['nip', 'name', 'rank', 'position', 'is_photo_locked']], use_container_width=True)
+        tab_list, tab_add = st.tabs(["📋 Daftar & Edit Pegawai", "➕ Tambah Pegawai Baru"])
         
-        st.write("---")
-        st.subheader("Upload Foto Pegawai")
-        nip_select = st.selectbox("Pilih Pegawai:", emp_filtered['nip'].tolist() if not emp_filtered.empty else [])
-        
-        if nip_select:
-            idx = st.session_state.employees[st.session_state.employees['nip'] == nip_select].index[0]
-            is_locked = st.session_state.employees.loc[idx, 'is_photo_locked']
-            
-            if is_locked and role == "ADMIN_SEKOLAH":
-                st.warning("🔒 Foto pegawai ini sudah dikunci! Hanya Super Admin yang dapat menggantinya.")
+        # TAB 1: EDIT & DAFTAR PEGAWAI
+        with tab_list:
+            if role == "ADMIN_SEKOLAH":
+                emp_filtered = st.session_state.employees[st.session_state.employees['school_id'] == school_id]
             else:
-                uploaded_photo = st.file_uploader("Pilih Berkas Foto", type=['jpg', 'jpeg', 'png'])
-                if uploaded_photo and st.button("Simpan Foto"):
-                    st.session_state.employees.loc[idx, 'photo_uploaded'] = True
-                    st.session_state.employees.loc[idx, 'is_photo_locked'] = True
-                    st.success("Foto berhasil diunggah dan dikunci.")
+                emp_filtered = st.session_state.employees
+                
+            st.write("💡 **Tips:** Untuk mengedit data, klik ganda langsung pada sel tabel di bawah ini (Kolom NIP tidak bisa diubah). Klik tombol simpan setelah selesai.")
+            
+            edited_df = st.data_editor(
+                emp_filtered[['nip', 'name', 'rank', 'position', 'is_photo_locked']],
+                disabled=["nip", "is_photo_locked"], 
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            if st.button("Simpan Perubahan Data Tabel"):
+                for idx, row in edited_df.iterrows():
+                    actual_idx = emp_filtered.index[emp_filtered['nip'] == row['nip']][0]
+                    st.session_state.employees.loc[actual_idx, 'name'] = row['name']
+                    st.session_state.employees.loc[actual_idx, 'rank'] = row['rank']
+                    st.session_state.employees.loc[actual_idx, 'position'] = row['position']
+                st.success("Perubahan data pegawai berhasil disimpan!")
+            
+            st.write("---")
+            st.subheader("Upload Foto Pegawai")
+            nip_select = st.selectbox("Pilih Pegawai:", emp_filtered['nip'].tolist() if not emp_filtered.empty else [])
+            
+            if nip_select:
+                idx = st.session_state.employees[st.session_state.employees['nip'] == nip_select].index[0]
+                is_locked = st.session_state.employees.loc[idx, 'is_photo_locked']
+                
+                if is_locked and role == "ADMIN_SEKOLAH":
+                    st.warning("🔒 Foto pegawai ini sudah dikunci! Hanya Super Admin yang dapat menggantinya.")
+                else:
+                    uploaded_photo = st.file_uploader("Pilih Berkas Foto", type=['jpg', 'jpeg', 'png'])
+                    if uploaded_photo and st.button("Simpan Foto"):
+                        st.session_state.employees.loc[idx, 'photo_uploaded'] = True
+                        st.session_state.employees.loc[idx, 'is_photo_locked'] = True
+                        st.success("Foto berhasil diunggah dan dikunci.")
+
+        # TAB 2: TAMBAH PEGAWAI BARU
+        with tab_add:
+            st.subheader("Formulir Tambah Pegawai")
+            with st.form("form_add_pegawai"):
+                new_nip = st.text_input("NIP / NIY (Nomor Induk)")
+                new_name = st.text_input("Nama Lengkap (Beserta Gelar)")
+                new_rank = st.text_input("Golongan / Pangkat (Contoh: III/c)")
+                new_position = st.text_input("Jabatan (Contoh: Guru Matematika)")
+                
+                if role == "SUPER_ADMIN":
+                    target_school = st.selectbox("Pilih ID Sekolah:", st.session_state.schools['id'].tolist())
+                else:
+                    target_school = school_id
+                    
+                submit_add = st.form_submit_button("Simpan Data Pegawai Baru")
+                
+                if submit_add:
+                    if new_nip and new_name:
+                        if new_nip in st.session_state.employees['nip'].values:
+                            st.error("Gagal: NIP tersebut sudah terdaftar di sistem!")
+                        else:
+                            new_emp = {
+                                'nip': new_nip, 'name': new_name, 'rank': new_rank,
+                                'position': new_position, 'school_id': target_school, 
+                                'photo_uploaded': False, 'is_photo_locked': False
+                            }
+                            st.session_state.employees = pd.concat([st.session_state.employees, pd.DataFrame([new_emp])], ignore_index=True)
+                            st.success(f"Pegawai {new_name} berhasil ditambahkan!")
+                    else:
+                        st.error("Kolom NIP dan Nama Lengkap wajib diisi!")
 
     # --- MENU DATA SEKOLAH ---
     elif choice == "Data Sekolah":
