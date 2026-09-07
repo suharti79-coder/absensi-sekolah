@@ -328,6 +328,25 @@ def admin_dashboard():
         else:
             st.write("Semua Data Sekolah (Super Admin):")
             st.dataframe(st.session_state.schools, use_container_width=True)
+            
+            st.write("---")
+            st.subheader("🔓 Buka Kunci Titik Koordinat")
+            st.caption("Pilih sekolah untuk mereset status kunci koordinat agar Admin Sekolah dapat menginput ulang lokasinya.")
+            
+            if not st.session_state.schools.empty:
+                # Filter hanya sekolah yang koordinatnya sedang dikunci
+                locked_schools = st.session_state.schools[st.session_state.schools['is_coordinate_locked'] == True]
+                
+                if not locked_schools.empty:
+                    school_to_unlock = st.selectbox("Pilih Sekolah:", locked_schools['school_name'].tolist())
+                    
+                    if st.button("Buka Kunci Koordinat"):
+                        idx_to_unlock = st.session_state.schools[st.session_state.schools['school_name'] == school_to_unlock].index[0]
+                        st.session_state.schools.loc[idx_to_unlock, 'is_coordinate_locked'] = False
+                        st.success(f"Kunci koordinat untuk {school_to_unlock} berhasil dibuka!")
+                        st.rerun()
+                else:
+                    st.info("Saat ini tidak ada sekolah yang titik koordinatnya terkunci.")
 
     # --- MENU UBAH PASSWORD ---
     elif choice == "Ubah Password":
