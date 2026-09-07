@@ -5,3 +5,5 @@ geopy
 pytz 
 opencv-python-headless 
 streamlit-geolocation 
+face-recognition
+Pillow

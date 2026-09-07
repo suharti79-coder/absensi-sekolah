@@ -38,8 +38,8 @@ if 'employees' not in st.session_state:
     st.session_state.employees = pd.DataFrame([
         {
             'nip': '198505122010011002', 'name': 'Budi Santoso, S.Pd', 'rank': 'III/c',
-            'position': 'Guru Matematika', 'school_id': 1, 'photo_uploaded': True,
-            'is_photo_locked': True
+            'position': 'Guru Matematika', 'school_id': 1, 'photo_uploaded': False,
+            'is_photo_locked': False, 'face_encoding': None
         }
     ])
 
@@ -105,26 +105,46 @@ def public_landing_page():
                         img_camera = st.camera_input("Ambil foto wajah langsung untuk verifikasi:")
                         
                         if img_camera:
-                            if emp_data['photo_uploaded']:
-                                st.success("Verifikasi Liveness & Matching Wajah Berhasil!")
+                            if emp_data['photo_uploaded'] and emp_data['face_encoding'] is not None:
+                                import face_recognition
+                                import numpy as np
+                                from PIL import Image
                                 
-                                if st.button("Kirim Absensi Sekarang"):
-                                    now_mks = get_now_makassar()
-                                    new_att = {
-                                        'nip': emp_data['nip'],
-                                        'name': emp_data['name'],
-                                        'school_name': sch_data['school_name'],
-                                        'date': now_mks.strftime('%Y-%m-%d'),
-                                        'time_in': now_mks.strftime('%H:%M:%S'),
-                                        'status': 'Hadir' if now_mks.hour < 8 else 'Terlambat',
-                                        'lat': user_lat,
-                                        'lng': user_lng
-                                    }
-                                    st.session_state.attendances = pd.concat([st.session_state.attendances, pd.DataFrame([new_att])], ignore_index=True)
-                                    st.balloons()
-                                    st.success("Absensi berhasil dicatat!")
+                                # Proses gambar langsung dari kamera absen
+                                cam_pil = Image.open(img_camera).convert('RGB')
+                                cam_np = np.array(cam_pil)
+                                cam_encodings = face_recognition.face_encodings(cam_np)
+                                
+                                if len(cam_encodings) > 0:
+                                    # Bandingkan wajah di kamera dengan database (Toleransi 0.5 = ketat)
+                                    match = face_recognition.compare_faces(
+                                        [np.array(emp_data['face_encoding'])], 
+                                        cam_encodings[0], 
+                                        tolerance=0.5
+                                    )[0]
+                                    
+                                    if match:
+                                        st.success("✅ Verifikasi Liveness & Matching Wajah Berhasil (Cocok)!")
+                                        
+                                        if st.button("Kirim Absensi Sekarang"):
+                                            now_mks = get_now_makassar()
+                                            new_att = {
+                                                'nip': emp_data['nip'], 'name': emp_data['name'],
+                                                'school_name': sch_data['school_name'],
+                                                'date': now_mks.strftime('%Y-%m-%d'),
+                                                'time_in': now_mks.strftime('%H:%M:%S'),
+                                                'status': 'Hadir' if now_mks.hour < 8 else 'Terlambat',
+                                                'lat': user_lat, 'lng': user_lng
+                                            }
+                                            st.session_state.attendances = pd.concat([st.session_state.attendances, pd.DataFrame([new_att])], ignore_index=True)
+                                            st.balloons()
+                                            st.success("Absensi berhasil dicatat!")
+                                    else:
+                                        st.error("⛔ WAJAH TIDAK COCOK! Absensi ditolak karena terdeteksi wajah orang lain.")
+                                else:
+                                    st.error("Wajah tidak terdeteksi di kamera! Pastikan pencahayaan cukup.")
                             else:
-                                st.error("Admin Sekolah belum mengunggah foto acuan Anda! Hubungi Admin.")
+                                st.error("Admin Sekolah belum mengunggah foto acuan (atau data format lama). Hubungi Admin.")
                     else:
                         st.error(f"Absensi Ditolak! Anda berada {distance_meters:.1f} meter di luar lokasi sekolah.")
                 else:
@@ -264,9 +284,23 @@ def admin_dashboard():
                 else:
                     uploaded_photo = st.file_uploader("Pilih Berkas Foto", type=['jpg', 'jpeg', 'png'])
                     if uploaded_photo and st.button("Simpan Foto"):
-                        st.session_state.employees.loc[idx, 'photo_uploaded'] = True
-                        st.session_state.employees.loc[idx, 'is_photo_locked'] = True
-                        st.success("Foto berhasil diunggah dan dikunci.")
+                        import face_recognition
+                        import numpy as np
+                        from PIL import Image
+                        
+                        # Ekstrak pola wajah dari foto yang diupload Admin
+                        img_pil = Image.open(uploaded_photo).convert('RGB')
+                        img_np = np.array(img_pil)
+                        encodings = face_recognition.face_encodings(img_np)
+                        
+                        if len(encodings) > 0:
+                            st.session_state.employees.at[idx, 'photo_uploaded'] = True
+                            st.session_state.employees.at[idx, 'is_photo_locked'] = True
+                            # Simpan array biometrik ke database
+                            st.session_state.employees.at[idx, 'face_encoding'] = encodings[0].tolist()
+                            st.success("Foto berhasil diunggah dan pola wajah biometrik disimpan!")
+                        else:
+                            st.error("Wajah tidak terdeteksi pada foto! Silakan gunakan foto close-up yang jelas.")
 
         # TAB 2: TAMBAH PEGAWAI BARU
         with tab_add:
@@ -292,7 +326,8 @@ def admin_dashboard():
                             new_emp = {
                                 'nip': new_nip, 'name': new_name, 'rank': new_rank,
                                 'position': new_position, 'school_id': target_school, 
-                                'photo_uploaded': False, 'is_photo_locked': False
+                                'photo_uploaded': False, 'is_photo_locked': False,
+                                'face_encoding': None
                             }
                             st.session_state.employees = pd.concat([st.session_state.employees, pd.DataFrame([new_emp])], ignore_index=True)
                             st.success(f"Pegawai {new_name} berhasil ditambahkan!")
