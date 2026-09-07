@@ -74,46 +74,61 @@ def public_landing_page():
                 
                 st.info(f"Pegawai: **{emp_data['name']}** | Sekolah: **{sch_data['school_name']}**")
                 
+                # Input GPS Otomatis
                 st.write("---")
-                st.markdown("**1. Verifikasi Lokasi GPS**")
-                user_lat = st.number_input("Latitude Anda saat ini", value=-5.147665, format="%.6f")
-                user_lng = st.number_input("Longitude Anda saat ini", value=119.432731, format="%.6f")
+                st.markdown("**1. Verifikasi Lokasi GPS (Otomatis)**")
+                st.info("Klik tombol peniti di bawah dan izinkan akses lokasi (Allow Location) pada browser Anda.")
                 
-                target_coord = (sch_data['lat'], sch_data['lng'])
-                user_coord = (user_lat, user_lng)
-                distance_meters = geodesic(target_coord, user_coord).meters
+                from streamlit_geolocation import streamlit_geolocation
+                location = streamlit_geolocation()
                 
-                if distance_meters <= 100:
-                    st.success(f"Lokasi Valid! Jarak ke sekolah: {distance_meters:.1f} meter (Maks. 100m)")
+                if location and location.get('latitude') is not None and location.get('longitude') is not None:
+                    user_lat = location['latitude']
+                    user_lng = location['longitude']
                     
-                    st.markdown("**2. Rekam Wajah (Liveness & Matching)**")
-                    img_camera = st.camera_input("Ambil foto wajah langsung untuk verifikasi:")
+                    # Menampilkan koordinat dalam mode terkunci (disabled)
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input("Latitude Anda", value=str(user_lat), disabled=True)
+                    with col2:
+                        st.text_input("Longitude Anda", value=str(user_lng), disabled=True)
                     
-                    if img_camera:
-                        if emp_data['photo_uploaded']:
-                            st.success("Verifikasi Liveness & Matching Wajah Berhasil!")
-                            
-                            if st.button("Kirim Absensi Sekarang"):
-                                now_mks = get_now_makassar()
-                                new_att = {
-                                    'nip': emp_data['nip'],
-                                    'name': emp_data['name'],
-                                    'school_name': sch_data['school_name'],
-                                    'date': now_mks.strftime('%Y-%m-%d'),
-                                    'time_in': now_mks.strftime('%H:%M:%S'),
-                                    'status': 'Hadir' if now_mks.hour < 8 else 'Terlambat',
-                                    'lat': user_lat,
-                                    'lng': user_lng
-                                }
-                                st.session_state.attendances = pd.concat([st.session_state.attendances, pd.DataFrame([new_att])], ignore_index=True)
-                                st.balloons()
-                                st.success("Absensi berhasil dicatat!")
-                        else:
-                            st.error("Admin Sekolah belum mengunggah foto acuan Anda! Hubungi Admin.")
+                    # Hitung Jarak ke Sekolah (Metode Haversine)
+                    target_coord = (sch_data['lat'], sch_data['lng'])
+                    user_coord = (user_lat, user_lng)
+                    distance_meters = geodesic(target_coord, user_coord).meters
+                    
+                    if distance_meters <= 100:
+                        st.success(f"Lokasi Valid! Jarak ke sekolah: {distance_meters:.1f} meter (Maks. 100m)")
+                        
+                        st.markdown("**2. Rekam Wajah (Liveness & Matching)**")
+                        img_camera = st.camera_input("Ambil foto wajah langsung untuk verifikasi:")
+                        
+                        if img_camera:
+                            if emp_data['photo_uploaded']:
+                                st.success("Verifikasi Liveness & Matching Wajah Berhasil!")
+                                
+                                if st.button("Kirim Absensi Sekarang"):
+                                    now_mks = get_now_makassar()
+                                    new_att = {
+                                        'nip': emp_data['nip'],
+                                        'name': emp_data['name'],
+                                        'school_name': sch_data['school_name'],
+                                        'date': now_mks.strftime('%Y-%m-%d'),
+                                        'time_in': now_mks.strftime('%H:%M:%S'),
+                                        'status': 'Hadir' if now_mks.hour < 8 else 'Terlambat',
+                                        'lat': user_lat,
+                                        'lng': user_lng
+                                    }
+                                    st.session_state.attendances = pd.concat([st.session_state.attendances, pd.DataFrame([new_att])], ignore_index=True)
+                                    st.balloons()
+                                    st.success("Absensi berhasil dicatat!")
+                            else:
+                                st.error("Admin Sekolah belum mengunggah foto acuan Anda! Hubungi Admin.")
+                    else:
+                        st.error(f"Absensi Ditolak! Anda berada {distance_meters:.1f} meter di luar lokasi sekolah.")
                 else:
-                    st.error(f"Absensi Ditolak! Anda berada {distance_meters:.1f} meter di luar lokasi sekolah.")
-            else:
-                st.warning("NIP tidak ditemukan dalam sistem.")
+                    st.warning("Menunggu akses lokasi GPS... Silakan klik tombol di atas.")
 
         st.write("---")
         st.subheader("📋 Daftar Pegawai Sudah Absen Hari Ini")
