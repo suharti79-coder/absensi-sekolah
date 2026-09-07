@@ -48,6 +48,11 @@ if 'attendances' not in st.session_state:
         'nip', 'name', 'school_name', 'date', 'time_in', 'status', 'lat', 'lng'
     ])
 
+if 'permits' not in st.session_state:
+    st.session_state.permits = pd.DataFrame(columns=[
+        'nip', 'name', 'permit_type', 'start_date', 'end_date', 'file_name'
+    ])
+
 # ---------------------------------------------------------
 # 3. FITUR PRESENSI & LOGIN DEPAN (PUBLIC)
 # ---------------------------------------------------------
@@ -69,13 +74,11 @@ def public_landing_page():
                 
                 st.info(f"Pegawai: **{emp_data['name']}** | Sekolah: **{sch_data['school_name']}**")
                 
-                # Input Koordinat Manual / Simulasi GPS
                 st.write("---")
                 st.markdown("**1. Verifikasi Lokasi GPS**")
                 user_lat = st.number_input("Latitude Anda saat ini", value=-5.147665, format="%.6f")
                 user_lng = st.number_input("Longitude Anda saat ini", value=119.432731, format="%.6f")
                 
-                # Hitung Jarak ke Sekolah (Metode Haversine via Geopy)
                 target_coord = (sch_data['lat'], sch_data['lng'])
                 user_coord = (user_lat, user_lng)
                 distance_meters = geodesic(target_coord, user_coord).meters
@@ -87,9 +90,8 @@ def public_landing_page():
                     img_camera = st.camera_input("Ambil foto wajah langsung untuk verifikasi:")
                     
                     if img_camera:
-                        # Simulasi Anti-Spoofing & Matching foto
                         if emp_data['photo_uploaded']:
-                            st.success(" Verifikasi Liveness & Matching Wajah Berhasil!")
+                            st.success("Verifikasi Liveness & Matching Wajah Berhasil!")
                             
                             if st.button("Kirim Absensi Sekarang"):
                                 now_mks = get_now_makassar()
@@ -144,7 +146,6 @@ def admin_dashboard():
     st.sidebar.title("Aplikasi Absensi")
     st.sidebar.write(f"Pengguna: **{user['username']}** ({role})")
     
-    # Navigasi Menu
     menu_options = [
         "Dashboard", "Rekapitulasi", "Data Pegawai", 
         "Data Sekolah", "Ubah Password"
@@ -185,7 +186,6 @@ def admin_dashboard():
     elif choice == "Rekapitulasi":
         st.header("Rekapitulasi Absensi")
         
-        # Filter Data
         df_att = st.session_state.attendances.copy()
         if role == "ADMIN_SEKOLAH":
             sch_name = st.session_state.schools[st.session_state.schools['id'] == school_id].iloc[0]['school_name']
@@ -193,7 +193,6 @@ def admin_dashboard():
             
         st.dataframe(df_att, use_container_width=True)
         
-        # Tombol Download Excel
         if not df_att.empty:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -211,7 +210,6 @@ def admin_dashboard():
     elif choice == "Data Pegawai":
         st.header("Kelola Data Tenaga Pendidik & Kependidikan")
         
-        # Filter berdasarkan sekolah
         if role == "ADMIN_SEKOLAH":
             emp_filtered = st.session_state.employees[st.session_state.employees['school_id'] == school_id]
         else:
@@ -272,6 +270,92 @@ def admin_dashboard():
             user_idx = st.session_state.users[st.session_state.users['username'] == user['username']].index[0]
             st.session_state.users.loc[user_idx, 'password'] = new_pass
             st.success("Password berhasil diperbarui.")
+
+    # --- MENU UPLOAD SURAT CUTI/SAKIT (KHUSUS SUPER ADMIN) ---
+    elif choice == "Upload Surat Cuti/Sakit":
+        st.header("📑 Upload Surat Cuti / Sakit / Tugas / Izin")
+        st.caption("Khusus Super Admin: Mengunggah berkas pengajuan ketidakhadiran pegawai.")
+        
+        emp_list = st.session_state.employees
+        if not emp_list.empty:
+            selected_nip = st.selectbox("Pilih Pegawai:", emp_list['nip'] + " - " + emp_list['name'])
+            nip_val = selected_nip.split(" - ")[0]
+            emp_obj = emp_list[emp_list['nip'] == nip_val].iloc[0]
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                permit_type = st.selectbox("Jenis Surat:", ["Cuti", "Sakit", "Surat Tugas", "Izin"])
+                start_date = st.date_input("Tanggal Mulai")
+            with col2:
+                uploaded_doc = st.file_uploader("Unggah Dokumen (PDF/Gambar):", type=['pdf', 'png', 'jpg', 'jpeg'])
+                end_date = st.date_input("Tanggal Selesai")
+                
+            if st.button("Simpan Surat Ketidakhadiran"):
+                if uploaded_doc is not None:
+                    new_permit = {
+                        'nip': nip_val,
+                        'name': emp_obj['name'],
+                        'permit_type': permit_type,
+                        'start_date': str(start_date),
+                        'end_date': str(end_date),
+                        'file_name': uploaded_doc.name
+                    }
+                    st.session_state.permits = pd.concat([st.session_state.permits, pd.DataFrame([new_permit])], ignore_index=True)
+                    st.success(f"Surat {permit_type} untuk {emp_obj['name']} berhasil disimpan!")
+                else:
+                    st.error("Silakan unggah dokumen berkas surat terlebih dahulu.")
+        else:
+            st.warning("Belum ada data pegawai terdaftar.")
+            
+        st.write("---")
+        st.subheader("Daftar Surat Ketidakhadiran Terdaftar")
+        st.dataframe(st.session_state.permits, use_container_width=True)
+
+    # --- MENU TAMBAH AKUN ADMIN SEKOLAH (KHUSUS SUPER ADMIN) ---
+    elif choice == "Tambah Akun Admin Sekolah":
+        st.header("👤 Kelola Akun Admin Sekolah")
+        st.caption("Khusus Super Admin: Menambahkan akun admin sekolah baru dan reset password.")
+        
+        st.subheader("Tambah Admin Sekolah Baru")
+        with st.form("form_add_admin"):
+            school_name_input = st.text_input("Nama Sekolah")
+            new_username = st.text_input("Username Admin")
+            new_password = st.text_input("Password", type="password")
+            submit_btn = st.form_submit_button("Tambah Akun Admin")
+            
+            if submit_btn:
+                if school_name_input and new_username and new_password:
+                    new_sch_id = len(st.session_state.schools) + 1
+                    new_school = {
+                        'id': new_sch_id, 'npsn': f'1010100{new_sch_id}', 
+                        'school_name': school_name_input, 'address': '-', 
+                        'headmaster_name': '-', 'headmaster_nip': '-', 
+                        'lat': -5.147665, 'lng': 119.432731, 'is_coordinate_locked': False
+                    }
+                    st.session_state.schools = pd.concat([st.session_state.schools, pd.DataFrame([new_school])], ignore_index=True)
+                    
+                    new_user = {
+                        'username': new_username, 'password': new_password, 
+                        'role': 'ADMIN_SEKOLAH', 'school_id': new_sch_id
+                    }
+                    st.session_state.users = pd.concat([st.session_state.users, pd.DataFrame([new_user])], ignore_index=True)
+                    st.success(f"Akun Admin untuk {school_name_input} berhasil dibuat!")
+                else:
+                    st.error("Mohon isi semua kolom data.")
+                    
+        st.write("---")
+        st.subheader("Daftar Akun Admin Sekolah")
+        df_admin = st.session_state.users[st.session_state.users['role'] == 'ADMIN_SEKOLAH'].copy()
+        st.dataframe(df_admin[['username', 'role', 'school_id']], use_container_width=True)
+        
+        st.subheader("Reset Password Admin Sekolah")
+        if not df_admin.empty:
+            target_user = st.selectbox("Pilih Admin Sekolah:", df_admin['username'].tolist())
+            reset_pass_val = st.text_input("Password Baru untuk Admin Terpilih:", type="password")
+            if st.button("Reset Password Admin"):
+                u_idx = st.session_state.users[st.session_state.users['username'] == target_user].index[0]
+                st.session_state.users.loc[u_idx, 'password'] = reset_pass_val
+                st.success(f"Password untuk akun {target_user} berhasil diperbarui!")
 
 # ---------------------------------------------------------
 # 5. EXECUTION ROUTER
