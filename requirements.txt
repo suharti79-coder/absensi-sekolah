@@ -1,0 +1,7 @@
+streamlit 
+pandas 
+openpyxl 
+geopy 
+pytz 
+opencv-python-headless 
+streamlit-geolocation 
