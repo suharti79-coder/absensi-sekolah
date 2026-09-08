@@ -110,7 +110,6 @@ if st.session_state.role == "Pegawai":
                 st.success(f"✅ Lokasi Valid! Anda berada {jarak_meter:.0f} meter dari pusat sekolah.")
                 st.markdown("### Rekam Wajah")
                 
-                # Cek tipe data karena format CSV kadang membaca boolean sebagai string
                 is_uploaded = str(emp_data['photo_uploaded']).lower() == 'true'
                 
                 if is_uploaded and pd.notna(emp_data['photo_base64']):
@@ -160,7 +159,6 @@ if st.session_state.role == "Pegawai":
                         if ver_kode == "COCOK100":
                             if st.button("Kirim Absensi"):
                                 now = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
-                                # Baca absen lama, tambah baru, simpan
                                 data_absen_baru = pd.DataFrame([{
                                     'NIP': emp_data['nip'], 'Nama': emp_data['name'], 'Sekolah': sch_data['school_name'],
                                     'Tanggal': now.strftime('%Y-%m-%d'), 'Jam': now.strftime('%H:%M:%S'),
@@ -195,14 +193,14 @@ elif st.session_state.role == "Admin":
             base64_str = base64.b64encode(foto.getvalue()).decode('utf-8')
             st.session_state.employees.at[idx, 'photo_uploaded'] = True
             st.session_state.employees.at[idx, 'photo_base64'] = f"data:image/jpeg;base64,{base64_str}"
-            simpan_data(st.session_state.employees, FILE_PEGAWAI) # Simpan permanen ke CSV
+            simpan_data(st.session_state.employees, FILE_PEGAWAI)
             st.success("Foto dikunci dan disimpan secara permanen!")
 
     st.markdown("### 2. Laporan")
     if os.path.exists(FILE_ABSENSI):
         df = pd.read_csv(FILE_ABSENSI)
         st.dataframe(df)
-        st.download_button("📥 Download", data=df.to_csv(index=False).encode('utf-8'), file_name="Absensi.csv")
+        st.download_button("📥 Download Laporan", data=df.to_csv(index=False).encode('utf-8'), file_name="Absensi.csv")
 
 # ==========================================
 # HAK AKSES 3: SUPERADMIN
@@ -210,7 +208,6 @@ elif st.session_state.role == "Admin":
 elif st.session_state.role == "Superadmin":
     st.title("🛠️ Dashboard Superadmin")
     
-    # --- TAB MENU SUPERADMIN ---
     tab1, tab2, tab3 = st.tabs(["🏛️ Kelola Sekolah", "👥 Kelola Pegawai", "🚨 Database"])
     
     # --- TAB 1: KELOLA SEKOLAH ---
@@ -240,13 +237,13 @@ elif st.session_state.role == "Superadmin":
 
     # --- TAB 2: KELOLA PEGAWAI ---
     with tab2:
-        st.markdown("### Tambah Pegawai & Penempatan")
+        st.markdown("### 1. Tambah Pegawai (Manual)")
         with st.form("form_tambah_pegawai"):
             new_nip = st.text_input("NIP")
             new_name = st.text_input("Nama Lengkap")
             new_school = st.selectbox("Penempatan Sekolah", st.session_state.schools['school_name'].tolist())
             
-            if st.form_submit_button("Tambahkan Pegawai"):
+            if st.form_submit_button("Tambahkan Manual"):
                 if new_nip and new_name:
                     new_emp = pd.DataFrame([{
                         'nip': new_nip, 'name': new_name, 'school_name': new_school, 
@@ -255,7 +252,43 @@ elif st.session_state.role == "Superadmin":
                     st.session_state.employees = pd.concat([st.session_state.employees, new_emp], ignore_index=True)
                     simpan_data(st.session_state.employees, FILE_PEGAWAI)
                     st.success(f"Pegawai ditambahkan ke {new_school}!")
-                    
+        
+        st.write("---")
+        st.markdown("### 2. Tambah Pegawai (Upload Excel/CSV Massal)")
+        st.info("Penting: Pastikan ejaan **school_name** pada file Excel/CSV sama persis dengan yang terdaftar di sistem.")
+        
+        # Tombol Download Template
+        template_df = pd.DataFrame({
+            'nip': ['198001012005011001', '198203042008012003'],
+            'name': ['Ahmad Guru', 'Siti Pengajar'],
+            'school_name': ['Sekolah Default', 'Sekolah Default']
+        })
+        csv_template = template_df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 1. Download Template CSV", data=csv_template, file_name="Template_Data_Pegawai.csv", mime="text/csv")
+        
+        # Form Upload
+        file_upload = st.file_uploader("2. Upload File Template yang sudah diisi", type=['csv'])
+        if file_upload is not None:
+            if st.button("Proses Upload"):
+                try:
+                    df_upload = pd.read_csv(file_upload)
+                    if all(col in df_upload.columns for col in ['nip', 'name', 'school_name']):
+                        df_upload['photo_uploaded'] = False
+                        df_upload['photo_base64'] = ''
+                        df_upload['nip'] = df_upload['nip'].astype(str)
+                        
+                        st.session_state.employees = pd.concat([st.session_state.employees, df_upload], ignore_index=True)
+                        st.session_state.employees.drop_duplicates(subset=['nip'], keep='last', inplace=True)
+                        simpan_data(st.session_state.employees, FILE_PEGAWAI)
+                        
+                        st.success(f"Berhasil mengunggah {len(df_upload)} data pegawai!")
+                        st.rerun()
+                    else:
+                        st.error("Format kolom salah! Pastikan file memiliki kolom: nip, name, school_name.")
+                except Exception as e:
+                    st.error(f"Gagal membaca file: {e}")
+
+        st.write("---")
         st.markdown("### Daftar Pegawai Aktif")
         if not st.session_state.employees.empty:
             st.dataframe(st.session_state.employees[['nip', 'name', 'school_name', 'photo_uploaded']])
