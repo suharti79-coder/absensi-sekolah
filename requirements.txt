@@ -5,4 +5,3 @@ geopy
 streamlit-geolocation
 openpyxl
 Pillow
-face-recognition

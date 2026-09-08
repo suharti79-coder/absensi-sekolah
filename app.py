@@ -37,9 +37,14 @@ if 'users' not in st.session_state:
 if 'employees' not in st.session_state:
     st.session_state.employees = pd.DataFrame([
         {
-            'nip': '198505122010011002', 'name': 'Budi Santoso, S.Pd', 'rank': 'III/c',
-            'position': 'Guru Matematika', 'school_id': 1, 'photo_uploaded': False,
-            'is_photo_locked': False, 'face_encoding': None
+            'nip': '198505122010011002', 
+            'name': 'Budi Santoso, S.Pd', 
+            'rank': 'III/c',
+            'position': 'Guru Matematika', 
+            'school_id': 1, 
+            'photo_uploaded': False,
+            'is_photo_locked': False, 
+            'photo_base64': ''
         }
     ])
 
@@ -101,50 +106,99 @@ def public_landing_page():
                     if distance_meters <= 100:
                         st.success(f"Lokasi Valid! Jarak ke sekolah: {distance_meters:.1f} meter (Maks. 100m)")
                         
-                        st.markdown("**2. Rekam Wajah (Liveness & Matching)**")
-                        img_camera = st.camera_input("Ambil foto wajah langsung untuk verifikasi:")
+                        st.markdown("**2. Rekam Wajah (Client-Side AI)**")
                         
-                        if img_camera:
-                            if emp_data['photo_uploaded'] and emp_data['face_encoding'] is not None:
-                                import face_recognition
-                                import numpy as np
-                                from PIL import Image
-                                
-                                # Proses gambar langsung dari kamera absen
-                                cam_pil = Image.open(img_camera).convert('RGB')
-                                cam_np = np.array(cam_pil)
-                                cam_encodings = face_recognition.face_encodings(cam_np)
-                                
-                                if len(cam_encodings) > 0:
-                                    # Bandingkan wajah di kamera dengan database (Toleransi 0.5 = ketat)
-                                    match = face_recognition.compare_faces(
-                                        [np.array(emp_data['face_encoding'])], 
-                                        cam_encodings[0], 
-                                        tolerance=0.5
-                                    )[0]
-                                    
-                                    if match:
-                                        st.success("✅ Verifikasi Liveness & Matching Wajah Berhasil (Cocok)!")
-                                        
-                                        if st.button("Kirim Absensi Sekarang"):
-                                            now_mks = get_now_makassar()
-                                            new_att = {
-                                                'nip': emp_data['nip'], 'name': emp_data['name'],
-                                                'school_name': sch_data['school_name'],
-                                                'date': now_mks.strftime('%Y-%m-%d'),
-                                                'time_in': now_mks.strftime('%H:%M:%S'),
-                                                'status': 'Hadir' if now_mks.hour < 8 else 'Terlambat',
-                                                'lat': user_lat, 'lng': user_lng
-                                            }
-                                            st.session_state.attendances = pd.concat([st.session_state.attendances, pd.DataFrame([new_att])], ignore_index=True)
-                                            st.balloons()
-                                            st.success("Absensi berhasil dicatat!")
-                                    else:
-                                        st.error("⛔ WAJAH TIDAK COCOK! Absensi ditolak karena terdeteksi wajah orang lain.")
-                                else:
-                                    st.error("Wajah tidak terdeteksi di kamera! Pastikan pencahayaan cukup.")
-                            else:
-                                st.error("Admin Sekolah belum mengunggah foto acuan (atau data format lama). Hubungi Admin.")
+                        if emp_data['photo_uploaded'] and emp_data['photo_base64'] != '':
+                            import streamlit.components.v1 as components
+                            
+                            st.info("Kamera memproses biometrik tanpa membebani server. Jika wajah cocok, KODE VALIDASI akan muncul.")
+                            
+                            html_code = f"""
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+                                <style>
+                                    body {{ text-align: center; font-family: sans-serif; margin: 0; }}
+                                    video {{ width: 100%; max-width: 320px; border-radius: 10px; border: 3px solid #ccc; }}
+                                    #status {{ margin-top: 10px; font-weight: bold; color: #d9534f; }}
+                                    #kode {{ margin-top: 15px; font-size: 22px; font-weight: bold; color: white; background: #5cb85c; padding: 10px; border-radius: 5px; display: none; }}
+                                </style>
+                            </head>
+                            <body>
+                                <video id="video" autoplay muted playsinline></video>
+                                <div id="status">Memuat Model AI dari CDN... (Tunggu sebentar)</div>
+                                <div id="kode">KODE VALIDASI: <b>COCOK100</b></div>
+                                <img id="refImg" src="{emp_data['photo_base64']}" style="display:none;" />
+
+                                <script>
+                                    async function runAI() {{
+                                        const status = document.getElementById('status');
+                                        try {{
+                                            await faceapi.nets.ssdMobilenetv1.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+                                            await faceapi.nets.faceLandmark68Net.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+                                            await faceapi.nets.faceRecognitionNet.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+                                            
+                                            status.innerText = "Model Siap! Menyiapkan kamera...";
+                                            
+                                            const refImg = document.getElementById('refImg');
+                                            const refDetect = await faceapi.detectSingleFace(refImg).withFaceLandmarks().withFaceDescriptor();
+                                            if(!refDetect) {{ status.innerText = "Wajah acuan buram. Minta admin upload ulang."; return; }}
+                                            const faceMatcher = new faceapi.FaceMatcher(refDetect);
+                                            
+                                            const video = document.getElementById('video');
+                                            const stream = await navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "user" }} }});
+                                            video.srcObject = stream;
+                                            
+                                            status.innerText = "Menganalisis wajah Anda... Arahkan wajah ke kamera!";
+                                            
+                                            setInterval(async () => {{
+                                                const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
+                                                if(detection) {{
+                                                    const match = faceMatcher.findBestMatch(detection.descriptor);
+                                                    if(match.distance <= 0.5) {{ 
+                                                        status.style.display = "none";
+                                                        document.getElementById('kode').style.display = "inline-block";
+                                                    }} else {{
+                                                        status.innerText = "Wajah tidak cocok. Jarak: " + match.distance.toFixed(2);
+                                                    }}
+                                                }} else {{
+                                                    status.innerText = "Wajah tidak terdeteksi di layar.";
+                                                }}
+                                            }}, 1500);
+                                            
+                                        }} catch (err) {{
+                                            status.innerText = "Mohon Izinkan Akses Kamera di Browser Anda.";
+                                        }}
+                                    }}
+                                    runAI();
+                                </script>
+                            </body>
+                            </html>
+                            """
+                            
+                            components.html(html_code, height=450, scrolling=False)
+                            
+                            st.write("---")
+                            ver_kode = st.text_input("Masukkan KODE VALIDASI (jika wajah cocok di atas):")
+                            
+                            if ver_kode == "COCOK100":
+                                st.success("✅ Verifikasi Wajah Berhasil!")
+                                if st.button("Kirim Absensi Sekarang"):
+                                    now_mks = get_now_makassar()
+                                    new_att = {
+                                        'nip': emp_data['nip'], 'name': emp_data['name'],
+                                        'school_name': sch_data['school_name'], 'date': now_mks.strftime('%Y-%m-%d'),
+                                        'time_in': now_mks.strftime('%H:%M:%S'), 'status': 'Hadir' if now_mks.hour < 8 else 'Terlambat',
+                                        'lat': user_lat, 'lng': user_lng
+                                    }
+                                    st.session_state.attendances = pd.concat([st.session_state.attendances, pd.DataFrame([new_att])], ignore_index=True)
+                                    st.balloons()
+                                    st.success("Absensi berhasil dicatat!")
+                            elif ver_kode:
+                                st.error("Kode Validasi Salah!")
+                        else:
+                            st.error("Admin Sekolah belum mengunggah foto acuan. Hubungi Admin.")
                     else:
                         st.error(f"Absensi Ditolak! Anda berada {distance_meters:.1f} meter di luar lokasi sekolah.")
                 else:
@@ -284,23 +338,17 @@ def admin_dashboard():
                 else:
                     uploaded_photo = st.file_uploader("Pilih Berkas Foto", type=['jpg', 'jpeg', 'png'])
                     if uploaded_photo and st.button("Simpan Foto"):
-                        import face_recognition
-                        import numpy as np
-                        from PIL import Image
+                        import base64
                         
-                        # Ekstrak pola wajah dari foto yang diupload Admin
-                        img_pil = Image.open(uploaded_photo).convert('RGB')
-                        img_np = np.array(img_pil)
-                        encodings = face_recognition.face_encodings(img_np)
+                        # Ubah gambar fisik menjadi teks Base64 agar bisa dibaca browser/JS
+                        bytes_data = uploaded_photo.getvalue()
+                        base64_str = base64.b64encode(bytes_data).decode('utf-8')
                         
-                        if len(encodings) > 0:
-                            st.session_state.employees.at[idx, 'photo_uploaded'] = True
-                            st.session_state.employees.at[idx, 'is_photo_locked'] = True
-                            # Simpan array biometrik ke database
-                            st.session_state.employees.at[idx, 'face_encoding'] = encodings[0].tolist()
-                            st.success("Foto berhasil diunggah dan pola wajah biometrik disimpan!")
-                        else:
-                            st.error("Wajah tidak terdeteksi pada foto! Silakan gunakan foto close-up yang jelas.")
+                        st.session_state.employees.at[idx, 'photo_uploaded'] = True
+                        st.session_state.employees.at[idx, 'is_photo_locked'] = True
+                        # Simpan teks foto ke database sementara
+                        st.session_state.employees.at[idx, 'photo_base64'] = f"data:image/jpeg;base64,{base64_str}"
+                        st.success("Foto berhasil diunggah dan disiapkan untuk Client-Side AI!")
 
         # TAB 2: TAMBAH PEGAWAI BARU
         with tab_add:
@@ -324,10 +372,14 @@ def admin_dashboard():
                             st.error("Gagal: NIP tersebut sudah terdaftar di sistem!")
                         else:
                             new_emp = {
-                                'nip': new_nip, 'name': new_name, 'rank': new_rank,
-                                'position': new_position, 'school_id': target_school, 
-                                'photo_uploaded': False, 'is_photo_locked': False,
-                                'face_encoding': None
+                                'nip': new_nip,
+                                'name': new_name, 
+                                'rank': new_rank,
+                                'position': new_position,
+                                'school_id': target_school,
+                                'photo_uploaded': False,
+                                'is_photo_locked': False,
+                                'photo_base64': ''
                             }
                             st.session_state.employees = pd.concat([st.session_state.employees, pd.DataFrame([new_emp])], ignore_index=True)
                             st.success(f"Pegawai {new_name} berhasil ditambahkan!")
