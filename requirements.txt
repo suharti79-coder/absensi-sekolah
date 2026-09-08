@@ -1,7 +1,7 @@
+streamlit
 pandas
 numpy
 pytz
 geopy
 streamlit-geolocation
 openpyxl
-Pillow

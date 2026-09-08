@@ -1,570 +1,179 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-from datetime import datetime
+import datetime
 import pytz
-from geopy.distance import geodesic
-import io
+import base64
+import streamlit.components.v1 as components
+import os
 
-# ---------------------------------------------------------
-# 1. KONFIGURASI SISTEM & ZONA WAKTU MAKASSAR (WITA)
-# ---------------------------------------------------------
-st.set_page_config(page_title="Sistem Absensi Sekolah", layout="wide")
-TZ_MAKASSAR = pytz.timezone('Asia/Makassar')
+# --- KONFIGURASI HALAMAN ---
+st.set_page_config(page_title="Sistem Absensi Biometrik", page_icon="🏫", layout="centered")
 
-def get_now_makassar():
-    return datetime.now(TZ_MAKASSAR)
+# --- DATABASE SEDERHANA (CSV) ---
+FILE_ABSENSI = "data_absensi.csv"
 
-# ---------------------------------------------------------
-# 2. INISIALISASI DATABASE SEMENTARA (SESSION STATE)
-# ---------------------------------------------------------
-if 'schools' not in st.session_state:
-    st.session_state.schools = pd.DataFrame([
-        {
-            'id': 1, 'npsn': '10101001', 'school_name': 'SMA Negeri 1 Makassar', 
-            'address': 'Jl. Murah Hati No. 1', 'headmaster_name': 'Dr. H. Ahmad, M.Pd', 
-            'headmaster_nip': '196801011990011001', 'lat': -5.147665, 'lng': 119.432731, 
-            'is_coordinate_locked': True
-        }
-    ])
+def simpan_ke_csv(data_baru):
+    df_baru = pd.DataFrame([data_baru])
+    if os.path.exists(FILE_ABSENSI):
+        df_lama = pd.read_csv(FILE_ABSENSI)
+        df_final = pd.concat([df_lama, df_baru], ignore_index=True)
+    else:
+        df_final = df_baru
+    df_final.to_csv(FILE_ABSENSI, index=False)
 
-if 'users' not in st.session_state:
-    st.session_state.users = pd.DataFrame([
-        {'username': 'superadmin', 'password': '123', 'role': 'SUPER_ADMIN', 'school_id': None},
-        {'username': 'admin_sman1', 'password': '123', 'role': 'ADMIN_SEKOLAH', 'school_id': 1}
-    ])
-
+# --- INISIALISASI DATA SEMENTARA ---
 if 'employees' not in st.session_state:
-    st.session_state.employees = pd.DataFrame([
-        {
-            'nip': '198505122010011002', 
-            'name': 'Budi Santoso, S.Pd', 
-            'rank': 'III/c',
-            'position': 'Guru Matematika', 
-            'school_id': 1, 
-            'photo_uploaded': False,
-            'is_photo_locked': False, 
-            'photo_base64': ''
-        }
-    ])
+    st.session_state.employees = pd.DataFrame([{
+        'nip': '12345', 'name': 'Budi Guru', 'photo_uploaded': False, 'photo_base64': ''
+    }])
 
-if 'attendances' not in st.session_state:
-    st.session_state.attendances = pd.DataFrame(columns=[
-        'nip', 'name', 'school_name', 'date', 'time_in', 'status', 'lat', 'lng'
-    ])
+# --- SIDEBAR (NAVIGASI) ---
+st.sidebar.title("Menu Navigasi")
+menu = st.sidebar.radio("Pilih Halaman:", ["Formulir Presensi (Pegawai)", "Panel Admin"])
 
-if 'permits' not in st.session_state:
-    st.session_state.permits = pd.DataFrame(columns=[
-        'nip', 'name', 'permit_type', 'start_date', 'end_date', 'file_name'
-    ])
-
-# ---------------------------------------------------------
-# 3. FITUR PRESENSI & LOGIN DEPAN (PUBLIC)
-# ---------------------------------------------------------
-def public_landing_page():
-    st.title("🏫 Sistem Presensi Biometrik & Lokasi")
-    st.caption(f"Waktu Server (Makassar / WITA): **{get_now_makassar().strftime('%d %B %Y | %H:%M:%S')} WITA**")
+# ==========================================
+# HALAMAN 1: FORMULIR PRESENSI (PEGAWAI)
+# ==========================================
+if menu == "Formulir Presensi (Pegawai)":
+    st.title("📸 Formulir Presensi Harian")
     
-    tab1, tab2 = st.tabs(["📌 Form Presensi Pegawai", "🔐 Login Admin"])
+    # 1. Pilih Pegawai
+    pegawai_pilihan = st.selectbox("Pilih Nama Anda:", st.session_state.employees['name'].tolist())
+    emp_data = st.session_state.employees[st.session_state.employees['name'] == pegawai_pilihan].iloc[0]
+    idx = st.session_state.employees.index[st.session_state.employees['name'] == pegawai_pilihan][0]
+
+    # 2. Kamera & AI Client-Side (Pendekatan Hibrida)
+    st.markdown("### Rekam Wajah (Verifikasi AI Lokal)")
     
-    with tab1:
-        st.subheader("Presensi Kehadiran Harian")
-        nip_input = st.text_input("Masukkan NIP Pegawai:")
+    if emp_data['photo_uploaded'] and emp_data['photo_base64'] != '':
+        img_camera = st.camera_input("Ambil Foto Wajah Anda")
         
-        if nip_input:
-            emp = st.session_state.employees[st.session_state.employees['nip'] == nip_input]
-            if not emp.empty:
-                emp_data = emp.iloc[0]
-                sch_data = st.session_state.schools[st.session_state.schools['id'] == emp_data['school_id']].iloc[0]
-                
-                st.info(f"Pegawai: **{emp_data['name']}** | Sekolah: **{sch_data['school_name']}**")
-                
-                # Input GPS Otomatis
-                st.write("---")
-                st.markdown("**1. Verifikasi Lokasi GPS (Otomatis)**")
-                st.info("Klik tombol peniti di bawah dan izinkan akses lokasi (Allow Location) pada browser Anda.")
-                
-                from streamlit_geolocation import streamlit_geolocation
-                location = streamlit_geolocation()
-                
-                if location and location.get('latitude') is not None and location.get('longitude') is not None:
-                    user_lat = location['latitude']
-                    user_lng = location['longitude']
-                    
-                    # Menampilkan koordinat dalam mode terkunci (disabled)
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.text_input("Latitude Anda", value=str(user_lat), disabled=True)
-                    with col2:
-                        st.text_input("Longitude Anda", value=str(user_lng), disabled=True)
-                    
-                    # Hitung Jarak ke Sekolah (Metode Haversine)
-                    target_coord = (sch_data['lat'], sch_data['lng'])
-                    user_coord = (user_lat, user_lng)
-                    distance_meters = geodesic(target_coord, user_coord).meters
-                    
-                    if distance_meters <= 100:
-                        st.success(f"Lokasi Valid! Jarak ke sekolah: {distance_meters:.1f} meter (Maks. 100m)")
-                        
-                        st.markdown("**2. Rekam Wajah (Kamera Bawaan + AI Lokal)**")
-                        
-                        if emp_data['photo_uploaded'] and emp_data['photo_base64'] != '':
-                            # 1. Gunakan kamera bawaan Streamlit yang PASTI diizinkan browser
-                            img_camera = st.camera_input("Ambil Foto Presensi Anda")
+        if img_camera:
+            bytes_data = img_camera.getvalue()
+            cam_base64 = f"data:image/jpeg;base64,{base64.b64encode(bytes_data).decode('utf-8')}"
+            
+            st.info("Memproses kecocokan wajah di HP/Laptop Anda...")
+            
+            # INJEKSI JS UNTUK AI
+            html_code = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
+                <style>
+                    body {{ text-align: center; font-family: sans-serif; margin: 0; }}
+                    #status {{ margin-top: 10px; font-weight: bold; color: #d9534f; }}
+                    #kode {{ margin-top: 15px; font-size: 22px; font-weight: bold; color: white; background: #5cb85c; padding: 10px; border-radius: 5px; display: none; }}
+                </style>
+            </head>
+            <body>
+                <div id="status">Memuat AI (Tunggu sebentar)...</div>
+                <div id="kode">KODE VALIDASI: <b>COCOK100</b></div>
+                <img id="refImg" src="{emp_data['photo_base64']}" style="display:none;" />
+                <img id="camImg" src="{cam_base64}" style="display:none;" />
+
+                <script>
+                    async function runAI() {{
+                        const status = document.getElementById('status');
+                        try {{
+                            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model';
+                            await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+                            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+                            await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
                             
-                            if img_camera:
-                                import base64
-                                import streamlit.components.v1 as components
-                                
-                                # 2. Ubah foto hasil jepretan Anda menjadi teks Base64
-                                bytes_data = img_camera.getvalue()
-                                cam_base64 = f"data:image/jpeg;base64,{base64.b64encode(bytes_data).decode('utf-8')}"
-                                
-                                st.info("Memproses kecocokan wajah di HP/Laptop Anda...")
-                                
-                                # 3. Injeksi AI HANYA untuk membandingkan 2 foto (Foto Admin vs Foto Jepretan)
-                                html_code = f"""
-                                <!DOCTYPE html>
-                                <html>
-                                <head>
-                                    <!-- Menggunakan CDN Face-API terbaru & bebas blokir CORS -->
-                                    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
-                                    <style>
-                                        body {{ text-align: center; font-family: sans-serif; margin: 0; }}
-                                        #status {{ margin-top: 10px; font-weight: bold; color: #d9534f; }}
-                                        #kode {{ margin-top: 15px; font-size: 22px; font-weight: bold; color: white; background: #5cb85c; padding: 10px; border-radius: 5px; display: none; }}
-                                    </style>
-                                </head>
-                                <body>
-                                    <div id="status">Memuat AI (Tunggu sebentar)...</div>
-                                    <div id="kode">KODE VALIDASI: <b>COCOK100</b></div>
-                                    
-                                    <img id="refImg" src="{emp_data['photo_base64']}" style="display:none;" />
-                                    <img id="camImg" src="{cam_base64}" style="display:none;" />
+                            status.innerText = "Menganalisis kecocokan wajah...";
+                            
+                            const refImg = document.getElementById('refImg');
+                            const camImg = document.getElementById('camImg');
+                            
+                            const refDetect = await faceapi.detectSingleFace(refImg).withFaceLandmarks().withFaceDescriptor();
+                            const camDetect = await faceapi.detectSingleFace(camImg).withFaceLandmarks().withFaceDescriptor();
+                            
+                            if(!refDetect) {{ status.innerText = "Wajah foto acuan Admin tidak terdeteksi."; return; }}
+                            if(!camDetect) {{ status.innerText = "Wajah Anda tidak terdeteksi pada foto jepretan."; return; }}
+                            
+                            const faceMatcher = new faceapi.FaceMatcher(refDetect);
+                            const match = faceMatcher.findBestMatch(camDetect.descriptor);
+                            
+                            if(match.distance <= 0.5) {{ 
+                                status.style.display = "none";
+                                document.getElementById('kode').style.display = "inline-block";
+                            }} else {{
+                                status.innerText = "⛔ WAJAH TIDAK COCOK! Jarak: " + match.distance.toFixed(2);
+                            }}
+                        }} catch (err) {{
+                            status.innerText = "Gagal memuat AI.";
+                        }}
+                    }}
+                    setTimeout(runAI, 500);
+                </script>
+            </body>
+            </html>
+            """
+            components.html(html_code, height=120, scrolling=False)
+            
+            st.write("---")
+            ver_kode = st.text_input("Masukkan KODE VALIDASI (jika wajah cocok):")
+            
+            if ver_kode == "COCOK100":
+                st.success("✅ Verifikasi Wajah Berhasil!")
+                if st.button("Kirim Absensi Sekarang"):
+                    waktu_sekarang = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
+                    data_baru = {
+                        'NIP': emp_data['nip'],
+                        'Nama': emp_data['name'],
+                        'Tanggal': waktu_sekarang.strftime('%Y-%m-%d'),
+                        'Jam': waktu_sekarang.strftime('%H:%M:%S'),
+                        'Status': 'Hadir'
+                    }
+                    simpan_ke_csv(data_baru) # Simpan permanen ke file CSV
+                    st.balloons()
+                    st.success("Data Absensi berhasil disimpan ke Database!")
+            elif ver_kode:
+                st.error("Kode Salah!")
+    else:
+        st.warning("Admin belum mengunggah foto acuan biometrik Anda. Hubungi Admin.")
 
-                                    <script>
-                                        async function runAI() {{
-                                            const status = document.getElementById('status');
-                                            try {{
-                                                // Tautan model baru dari jsDelivr CDN
-                                                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model';
-                                                
-                                                await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-                                                await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-                                                await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-                                                
-                                                status.innerText = "Menganalisis kecocokan wajah...";
-                                                
-                                                const refImg = document.getElementById('refImg');
-                                                const camImg = document.getElementById('camImg');
-                                                
-                                                const refDetect = await faceapi.detectSingleFace(refImg).withFaceLandmarks().withFaceDescriptor();
-                                                const camDetect = await faceapi.detectSingleFace(camImg).withFaceLandmarks().withFaceDescriptor();
-                                                
-                                                if(!refDetect) {{ 
-                                                    status.innerText = "Wajah foto acuan Admin tidak terdeteksi. Hubungi Admin."; 
-                                                    return; 
-                                                }}
-                                                if(!camDetect) {{ 
-                                                    status.innerText = "Wajah Anda tidak terdeteksi pada foto jepretan. Silakan ambil foto ulang."; 
-                                                    return; 
-                                                }}
-                                                
-                                                const faceMatcher = new faceapi.FaceMatcher(refDetect);
-                                                const match = faceMatcher.findBestMatch(camDetect.descriptor);
-                                                
-                                                if(match.distance <= 0.5) {{ 
-                                                    status.style.display = "none";
-                                                    document.getElementById('kode').style.display = "inline-block";
-                                                }} else {{
-                                                    status.innerText = "⛔ WAJAH TIDAK COCOK! (Jarak Kemiripan: " + match.distance.toFixed(2) + ")";
-                                                }}
-                                            }} catch (err) {{
-                                                status.innerText = "Gagal memuat AI: " + err.message;
-                                            }}
-                                        }}
-                                        // Berikan jeda sedikit agar pustaka ter-load sempurna
-                                        setTimeout(runAI, 500);
-                                    </script>
-                                </body>
-                                </html>
-                                """
-                                components.html(html_code, height=150, scrolling=False)
-                                
-                                st.write("---")
-                                ver_kode = st.text_input("Masukkan KODE VALIDASI (Jika wajah cocok):")
-                                
-                                if ver_kode == "COCOK100":
-                                    st.success("✅ Verifikasi Wajah Berhasil!")
-                                    if st.button("Kirim Absensi Sekarang"):
-                                        # (Fungsi menyimpan data absen ke tabel)
-                                        now_mks = get_now_makassar()
-                                        new_att = {
-                                            'nip': emp_data['nip'], 'name': emp_data['name'],
-                                            'school_name': sch_data['school_name'], 'date': now_mks.strftime('%Y-%m-%d'),
-                                            'time_in': now_mks.strftime('%H:%M:%S'), 'status': 'Hadir' if now_mks.hour < 8 else 'Terlambat',
-                                            'lat': user_lat, 'lng': user_lng
-                                        }
-                                        st.session_state.attendances = pd.concat([st.session_state.attendances, pd.DataFrame([new_att])], ignore_index=True)
-                                        st.balloons()
-                                        st.success("Absensi berhasil dicatat!")
-                                elif ver_kode:
-                                    st.error("Kode Validasi Salah!")
-                        else:
-                            st.error("Admin Sekolah belum mengunggah foto acuan. Hubungi Admin.")
-                    else:
-                        st.error(f"Absensi Ditolak! Anda berada {distance_meters:.1f} meter di luar lokasi sekolah.")
-                else:
-                    st.warning("Menunggu akses lokasi GPS... Silakan klik tombol di atas.")
+# ==========================================
+# HALAMAN 2: PANEL ADMIN (DENGAN AUTENTIKASI)
+# ==========================================
+elif menu == "Panel Admin":
+    st.title("🔐 Panel Admin Sekolah")
+    
+    # SISTEM LOGIN SEDERHANA
+    password = st.text_input("Masukkan Password Admin:", type="password")
+    
+    if password == "admin123": # Ganti password ini sesuai keinginan
+        st.success("Login Berhasil!")
+        
+        st.markdown("### 1. Upload Foto Acuan Wajah (Database Biometrik)")
+        pilihan_guru = st.selectbox("Pilih Pegawai:", st.session_state.employees['name'].tolist())
+        idx = st.session_state.employees.index[st.session_state.employees['name'] == pilihan_guru][0]
+        
+        foto_unggah = st.file_uploader("Upload Pas Foto Jelas", type=['jpg', 'jpeg', 'png'])
+        if foto_unggah and st.button("Simpan Foto Acuan"):
+            bytes_data = foto_unggah.getvalue()
+            base64_str = base64.b64encode(bytes_data).decode('utf-8')
+            st.session_state.employees.at[idx, 'photo_uploaded'] = True
+            st.session_state.employees.at[idx, 'photo_base64'] = f"data:image/jpeg;base64,{base64_str}"
+            st.success("Foto berhasil dikunci ke sistem!")
 
         st.write("---")
-        st.subheader("📋 Daftar Pegawai Sudah Absen Hari Ini")
-        st.dataframe(st.session_state.attendances, use_container_width=True)
-
-    with tab2:
-        st.subheader("Login Panel Admin")
-        username = st.text_input("Username Admin")
-        password = st.text_input("Password Admin", type="password")
-        if st.button("Masuk"):
-            matched_user = st.session_state.users[
-                (st.session_state.users['username'] == username) & 
-                (st.session_state.users['password'] == password)
-            ]
-            if not matched_user.empty:
-                st.session_state.logged_in = True
-                st.session_state.current_user = matched_user.iloc[0].to_dict()
-                st.rerun()
-            else:
-                st.error("Username atau Password salah!")
-
-# ---------------------------------------------------------
-# 4. DASHBOARD & PANEL UTAMA ADMIN
-# ---------------------------------------------------------
-def admin_dashboard():
-    user = st.session_state.current_user
-    role = user['role']
-    school_id = user['school_id']
-
-    st.sidebar.title("Aplikasi Absensi")
-    st.sidebar.write(f"Pengguna: **{user['username']}** ({role})")
-    
-    menu_options = [
-        "Dashboard", "Rekapitulasi", "Data Pegawai", 
-        "Data Sekolah", "Ubah Password"
-    ]
-    if role == "SUPER_ADMIN":
-        menu_options.insert(1, "Pengaturan Jam")
-        menu_options.append("Upload Surat Cuti/Sakit")
-        menu_options.append("Tambah Akun Admin Sekolah")
-        
-    choice = st.sidebar.radio("Navigasi Menu", menu_options)
-    
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.rerun()
-
-    # --- MENU DASHBOARD ---
-    if choice == "Dashboard":
-        st.header("Dashboard Kehadiran")
-        if role == "ADMIN_SEKOLAH":
-            sch_name = st.session_state.schools[st.session_state.schools['id'] == school_id].iloc[0]['school_name']
-            st.subheader(f"Sekolah: {sch_name}")
-            data_emp = st.session_state.employees[st.session_state.employees['school_id'] == school_id]
-        else:
-            st.subheader("Semua Sekolah (Super Admin)")
-            data_emp = st.session_state.employees
+        st.markdown("### 2. Download Database Absensi")
+        if os.path.exists(FILE_ABSENSI):
+            df_absen = pd.read_csv(FILE_ABSENSI)
+            st.dataframe(df_absen) # Tampilkan tabel di layar
             
-        st.dataframe(data_emp, use_container_width=True)
-
-    # --- MENU PENGATURAN (KHUSUS SUPER ADMIN) ---
-    elif choice == "Pengaturan Jam":
-        st.header("Pengaturan Batas Jam Absensi")
-        st.time_input("Batas Jam Masuk", value=datetime.strptime("07:30", "%H:%M").time())
-        st.time_input("Batas Jam Pulang", value=datetime.strptime("16:00", "%H:%M").time())
-        if st.button("Simpan Pengaturan"):
-            st.success("Jam operasional berhasil disimpan global.")
-
-    # --- MENU REKAPITULASI ---
-    elif choice == "Rekapitulasi":
-        st.header("Rekapitulasi Absensi")
-        
-        df_att = st.session_state.attendances.copy()
-        if role == "ADMIN_SEKOLAH":
-            sch_name = st.session_state.schools[st.session_state.schools['id'] == school_id].iloc[0]['school_name']
-            df_att = df_att[df_att['school_name'] == sch_name]
-            
-        st.dataframe(df_att, use_container_width=True)
-        
-        if not df_att.empty:
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_att.to_excel(writer, index=False, sheet_name='Rekap_Absensi')
-            excel_data = output.getvalue()
-            
+            # Tombol Download Data
+            csv = df_absen.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="📥 Download Rekap Excel",
-                data=excel_data,
-                file_name=f"Rekap_Absensi_{get_now_makassar().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                label="📥 Download Data Excel (CSV)",
+                data=csv,
+                file_name="Laporan_Absensi.csv",
+                mime="text/csv",
             )
-
-    # --- MENU DATA PEGAWAI ---
-    elif choice == "Data Pegawai":
-        st.header("Kelola Data Tenaga Pendidik & Kependidikan")
-        
-        tab_list, tab_add = st.tabs(["📋 Daftar & Edit Pegawai", "➕ Tambah Pegawai Baru"])
-        
-        # TAB 1: EDIT & DAFTAR PEGAWAI
-        with tab_list:
-            if role == "ADMIN_SEKOLAH":
-                emp_filtered = st.session_state.employees[st.session_state.employees['school_id'] == school_id]
-            else:
-                emp_filtered = st.session_state.employees
-                
-            st.write("💡 **Tips:** Untuk mengedit data, klik ganda langsung pada sel tabel di bawah ini (Kolom NIP tidak bisa diubah). Klik tombol simpan setelah selesai.")
-            
-            edited_df = st.data_editor(
-                emp_filtered[['nip', 'name', 'rank', 'position', 'is_photo_locked']],
-                disabled=["nip", "is_photo_locked"], 
-                use_container_width=True,
-                hide_index=True
-            )
-            
-            if st.button("Simpan Perubahan Data Tabel"):
-                for idx, row in edited_df.iterrows():
-                    actual_idx = emp_filtered.index[emp_filtered['nip'] == row['nip']][0]
-                    st.session_state.employees.loc[actual_idx, 'name'] = row['name']
-                    st.session_state.employees.loc[actual_idx, 'rank'] = row['rank']
-                    st.session_state.employees.loc[actual_idx, 'position'] = row['position']
-                st.success("Perubahan data pegawai berhasil disimpan!")
-            
-            st.write("---")
-            st.subheader("Upload Foto Pegawai")
-            nip_select = st.selectbox("Pilih Pegawai:", emp_filtered['nip'].tolist() if not emp_filtered.empty else [])
-            
-            if nip_select:
-                idx = st.session_state.employees[st.session_state.employees['nip'] == nip_select].index[0]
-                is_locked = st.session_state.employees.loc[idx, 'is_photo_locked']
-                
-                if is_locked and role == "ADMIN_SEKOLAH":
-                    st.warning("🔒 Foto pegawai ini sudah dikunci! Hanya Super Admin yang dapat menggantinya.")
-                else:
-                    uploaded_photo = st.file_uploader("Pilih Berkas Foto", type=['jpg', 'jpeg', 'png'])
-                    if uploaded_photo and st.button("Simpan Foto"):
-                        import base64
-                        
-                        # Ubah gambar fisik menjadi teks Base64 agar bisa dibaca browser/JS
-                        bytes_data = uploaded_photo.getvalue()
-                        base64_str = base64.b64encode(bytes_data).decode('utf-8')
-                        
-                        st.session_state.employees.at[idx, 'photo_uploaded'] = True
-                        st.session_state.employees.at[idx, 'is_photo_locked'] = True
-                        # Simpan teks foto ke database sementara
-                        st.session_state.employees.at[idx, 'photo_base64'] = f"data:image/jpeg;base64,{base64_str}"
-                        st.success("Foto berhasil diunggah dan disiapkan untuk Client-Side AI!")
-
-        # TAB 2: TAMBAH PEGAWAI BARU
-        with tab_add:
-            st.subheader("Formulir Tambah Pegawai")
-            with st.form("form_add_pegawai"):
-                new_nip = st.text_input("NIP / NIY (Nomor Induk)")
-                new_name = st.text_input("Nama Lengkap (Beserta Gelar)")
-                new_rank = st.text_input("Golongan / Pangkat (Contoh: III/c)")
-                new_position = st.text_input("Jabatan (Contoh: Guru Matematika)")
-                
-                if role == "SUPER_ADMIN":
-                    target_school = st.selectbox("Pilih ID Sekolah:", st.session_state.schools['id'].tolist())
-                else:
-                    target_school = school_id
-                    
-                submit_add = st.form_submit_button("Simpan Data Pegawai Baru")
-                
-                if submit_add:
-                    if new_nip and new_name:
-                        if new_nip in st.session_state.employees['nip'].values:
-                            st.error("Gagal: NIP tersebut sudah terdaftar di sistem!")
-                        else:
-                            new_emp = {
-                                'nip': new_nip,
-                                'name': new_name, 
-                                'rank': new_rank,
-                                'position': new_position,
-                                'school_id': target_school,
-                                'photo_uploaded': False,
-                                'is_photo_locked': False,
-                                'photo_base64': ''
-                            }
-                            st.session_state.employees = pd.concat([st.session_state.employees, pd.DataFrame([new_emp])], ignore_index=True)
-                            st.success(f"Pegawai {new_name} berhasil ditambahkan!")
-                    else:
-                        st.error("Kolom NIP dan Nama Lengkap wajib diisi!")
-
-    # --- MENU DATA SEKOLAH ---
-    elif choice == "Data Sekolah":
-        st.header("Data Profil & Koordinat Sekolah")
-        
-        if role == "ADMIN_SEKOLAH":
-            sch_idx = st.session_state.schools[st.session_state.schools['id'] == school_id].index[0]
-            sch = st.session_state.schools.loc[sch_idx]
-            
-            st.subheader("Ubah Profil Sekolah")
-            with st.form("form_edit_sekolah"):
-                new_school_name = st.text_input("Nama Sekolah", value=sch['school_name'])
-                new_npsn = st.text_input("NPSN", value=sch['npsn'])
-                new_address = st.text_area("Alamat Sekolah", value=sch['address'])
-                new_kepsek = st.text_input("Nama Kepala Sekolah", value=sch['headmaster_name'])
-                new_nip_kepsek = st.text_input("NIP Kepala Sekolah", value=sch['headmaster_nip'])
-                
-                submit_profile = st.form_submit_button("Simpan Perubahan Profil")
-                
-                if submit_profile:
-                    st.session_state.schools.loc[sch_idx, 'school_name'] = new_school_name
-                    st.session_state.schools.loc[sch_idx, 'npsn'] = new_npsn
-                    st.session_state.schools.loc[sch_idx, 'address'] = new_address
-                    st.session_state.schools.loc[sch_idx, 'headmaster_name'] = new_kepsek
-                    st.session_state.schools.loc[sch_idx, 'headmaster_nip'] = new_nip_kepsek
-                    st.success("Profil sekolah berhasil diperbarui!")
-            
-            st.write("---")
-            st.subheader("Titik Koordinat Lokasi Absensi")
-            if sch['is_coordinate_locked']:
-                st.text_input("Latitude", value=sch['lat'], disabled=True)
-                st.text_input("Longitude", value=sch['lng'], disabled=True)
-                st.warning("🔒 Titik koordinat sudah dikunci 1 kali. Hubungi Super Admin jika ingin mereset.")
-            else:
-                new_lat = st.number_input("Latitude", value=sch['lat'], format="%.6f")
-                new_lng = st.number_input("Longitude", value=sch['lng'], format="%.6f")
-                if st.button("Simpan Titik Koordinat (Kunci 1x)"):
-                    st.session_state.schools.loc[sch_idx, 'lat'] = new_lat
-                    st.session_state.schools.loc[sch_idx, 'lng'] = new_lng
-                    st.session_state.schools.loc[sch_idx, 'is_coordinate_locked'] = True
-                    st.success("Koordinat berhasil disimpan!")
-                    st.rerun()
         else:
-            st.write("Semua Data Sekolah (Super Admin):")
-            st.dataframe(st.session_state.schools, use_container_width=True)
+            st.info("Belum ada data absensi.")
             
-            st.write("---")
-            st.subheader("🔓 Buka Kunci Titik Koordinat")
-            st.caption("Pilih sekolah untuk mereset status kunci koordinat agar Admin Sekolah dapat menginput ulang lokasinya.")
-            
-            if not st.session_state.schools.empty:
-                # Filter hanya sekolah yang koordinatnya sedang dikunci
-                locked_schools = st.session_state.schools[st.session_state.schools['is_coordinate_locked'] == True]
-                
-                if not locked_schools.empty:
-                    school_to_unlock = st.selectbox("Pilih Sekolah:", locked_schools['school_name'].tolist())
-                    
-                    if st.button("Buka Kunci Koordinat"):
-                        idx_to_unlock = st.session_state.schools[st.session_state.schools['school_name'] == school_to_unlock].index[0]
-                        st.session_state.schools.loc[idx_to_unlock, 'is_coordinate_locked'] = False
-                        st.success(f"Kunci koordinat untuk {school_to_unlock} berhasil dibuka!")
-                        st.rerun()
-                else:
-                    st.info("Saat ini tidak ada sekolah yang titik koordinatnya terkunci.")
-
-    # --- MENU UBAH PASSWORD ---
-    elif choice == "Ubah Password":
-        st.header("Ubah Password Akun")
-        new_pass = st.text_input("Password Baru", type="password")
-        if st.button("Simpan Password Baru"):
-            user_idx = st.session_state.users[st.session_state.users['username'] == user['username']].index[0]
-            st.session_state.users.loc[user_idx, 'password'] = new_pass
-            st.success("Password berhasil diperbarui.")
-
-    # --- MENU UPLOAD SURAT CUTI/SAKIT (KHUSUS SUPER ADMIN) ---
-    elif choice == "Upload Surat Cuti/Sakit":
-        st.header("📑 Upload Surat Cuti / Sakit / Tugas / Izin")
-        st.caption("Khusus Super Admin: Mengunggah berkas pengajuan ketidakhadiran pegawai.")
-        
-        emp_list = st.session_state.employees
-        if not emp_list.empty:
-            selected_nip = st.selectbox("Pilih Pegawai:", emp_list['nip'] + " - " + emp_list['name'])
-            nip_val = selected_nip.split(" - ")[0]
-            emp_obj = emp_list[emp_list['nip'] == nip_val].iloc[0]
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                permit_type = st.selectbox("Jenis Surat:", ["Cuti", "Sakit", "Surat Tugas", "Izin"])
-                start_date = st.date_input("Tanggal Mulai")
-            with col2:
-                uploaded_doc = st.file_uploader("Unggah Dokumen (PDF/Gambar):", type=['pdf', 'png', 'jpg', 'jpeg'])
-                end_date = st.date_input("Tanggal Selesai")
-                
-            if st.button("Simpan Surat Ketidakhadiran"):
-                if uploaded_doc is not None:
-                    new_permit = {
-                        'nip': nip_val,
-                        'name': emp_obj['name'],
-                        'permit_type': permit_type,
-                        'start_date': str(start_date),
-                        'end_date': str(end_date),
-                        'file_name': uploaded_doc.name
-                    }
-                    st.session_state.permits = pd.concat([st.session_state.permits, pd.DataFrame([new_permit])], ignore_index=True)
-                    st.success(f"Surat {permit_type} untuk {emp_obj['name']} berhasil disimpan!")
-                else:
-                    st.error("Silakan unggah dokumen berkas surat terlebih dahulu.")
-        else:
-            st.warning("Belum ada data pegawai terdaftar.")
-            
-        st.write("---")
-        st.subheader("Daftar Surat Ketidakhadiran Terdaftar")
-        st.dataframe(st.session_state.permits, use_container_width=True)
-
-    # --- MENU TAMBAH AKUN ADMIN SEKOLAH (KHUSUS SUPER ADMIN) ---
-    elif choice == "Tambah Akun Admin Sekolah":
-        st.header("👤 Kelola Akun Admin Sekolah")
-        st.caption("Khusus Super Admin: Menambahkan akun admin sekolah baru dan reset password.")
-        
-        st.subheader("Tambah Admin Sekolah Baru")
-        with st.form("form_add_admin"):
-            school_name_input = st.text_input("Nama Sekolah")
-            new_username = st.text_input("Username Admin")
-            new_password = st.text_input("Password", type="password")
-            submit_btn = st.form_submit_button("Tambah Akun Admin")
-            
-            if submit_btn:
-                if school_name_input and new_username and new_password:
-                    new_sch_id = len(st.session_state.schools) + 1
-                    new_school = {
-                        'id': new_sch_id, 'npsn': f'1010100{new_sch_id}', 
-                        'school_name': school_name_input, 'address': '-', 
-                        'headmaster_name': '-', 'headmaster_nip': '-', 
-                        'lat': -5.147665, 'lng': 119.432731, 'is_coordinate_locked': False
-                    }
-                    st.session_state.schools = pd.concat([st.session_state.schools, pd.DataFrame([new_school])], ignore_index=True)
-                    
-                    new_user = {
-                        'username': new_username, 'password': new_password, 
-                        'role': 'ADMIN_SEKOLAH', 'school_id': new_sch_id
-                    }
-                    st.session_state.users = pd.concat([st.session_state.users, pd.DataFrame([new_user])], ignore_index=True)
-                    st.success(f"Akun Admin untuk {school_name_input} berhasil dibuat!")
-                else:
-                    st.error("Mohon isi semua kolom data.")
-                    
-        st.write("---")
-        st.subheader("Daftar Akun Admin Sekolah")
-        df_admin = st.session_state.users[st.session_state.users['role'] == 'ADMIN_SEKOLAH'].copy()
-        st.dataframe(df_admin[['username', 'role', 'school_id']], use_container_width=True)
-        
-        st.subheader("Reset Password Admin Sekolah")
-        if not df_admin.empty:
-            target_user = st.selectbox("Pilih Admin Sekolah:", df_admin['username'].tolist())
-            reset_pass_val = st.text_input("Password Baru untuk Admin Terpilih:", type="password")
-            if st.button("Reset Password Admin"):
-                u_idx = st.session_state.users[st.session_state.users['username'] == target_user].index[0]
-                st.session_state.users.loc[u_idx, 'password'] = reset_pass_val
-                st.success(f"Password untuk akun {target_user} berhasil diperbarui!")
-
-# ---------------------------------------------------------
-# 5. EXECUTION ROUTER
-# ---------------------------------------------------------
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-
-if not st.session_state.logged_in:
-    public_landing_page()
-else:
-    admin_dashboard()
+    elif password != "":
+        st.error("Password Salah!")
