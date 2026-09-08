@@ -16,11 +16,17 @@ FILE_ABSENSI = "data_absensi.csv"
 FILE_SEKOLAH = "data_sekolah.csv"
 FILE_PEGAWAI = "data_pegawai.csv"
 
-def muat_data(nama_file, data_default):
+def muat_data(nama_file, data_default, kolom_default=None):
     if os.path.exists(nama_file):
-        return pd.read_csv(nama_file)
+        try:
+            return pd.read_csv(nama_file)
+        except pd.errors.EmptyDataError:
+            # Jika file ada tapi kosong, buat ulang dengan format yang benar
+            df = pd.DataFrame(data_default) if data_default else pd.DataFrame(columns=kolom_default)
+            df.to_csv(nama_file, index=False)
+            return df
     else:
-        df = pd.DataFrame(data_default)
+        df = pd.DataFrame(data_default) if data_default else pd.DataFrame(columns=kolom_default)
         df.to_csv(nama_file, index=False)
         return df
 
@@ -34,7 +40,8 @@ if 'schools' not in st.session_state:
     ])
 
 if 'employees' not in st.session_state:
-    st.session_state.employees = muat_data(FILE_PEGAWAI, [])
+    # Mendefinisikan nama kolom wajib agar file CSV tidak pernah kosong total
+    st.session_state.employees = muat_data(FILE_PEGAWAI, [], kolom_default=['nip', 'name', 'school_name', 'photo_uploaded', 'photo_base64'])
 
 if 'role' not in st.session_state:
     st.session_state.role = None
