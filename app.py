@@ -106,97 +106,101 @@ def public_landing_page():
                     if distance_meters <= 100:
                         st.success(f"Lokasi Valid! Jarak ke sekolah: {distance_meters:.1f} meter (Maks. 100m)")
                         
-                        st.markdown("**2. Rekam Wajah (Client-Side AI)**")
+                        st.markdown("**2. Rekam Wajah (Kamera Bawaan + AI Lokal)**")
                         
                         if emp_data['photo_uploaded'] and emp_data['photo_base64'] != '':
-                            import streamlit.components.v1 as components
+                            # 1. Gunakan kamera bawaan Streamlit yang PASTI diizinkan browser
+                            img_camera = st.camera_input("Ambil Foto Presensi Anda")
                             
-                            st.info("Kamera memproses biometrik tanpa membebani server. Jika wajah cocok, KODE VALIDASI akan muncul.")
-                            
-                            html_code = f"""
-                            <!DOCTYPE html>
-                            <html>
-                            <head>
-                                <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-                                <style>
-                                    body {{ text-align: center; font-family: sans-serif; margin: 0; }}
-                                    video {{ width: 100%; max-width: 320px; border-radius: 10px; border: 3px solid #ccc; }}
-                                    #status {{ margin-top: 10px; font-weight: bold; color: #d9534f; }}
-                                    #kode {{ margin-top: 15px; font-size: 22px; font-weight: bold; color: white; background: #5cb85c; padding: 10px; border-radius: 5px; display: none; }}
-                                </style>
-                            </head>
-                            <body>
-                                <video id="video" autoplay muted playsinline></video>
-                                <div id="status">Memuat Model AI dari CDN... (Tunggu sebentar)</div>
-                                <div id="kode">KODE VALIDASI: <b>COCOK100</b></div>
-                                <img id="refImg" src="{emp_data['photo_base64']}" style="display:none;" />
+                            if img_camera:
+                                import base64
+                                import streamlit.components.v1 as components
+                                
+                                # 2. Ubah foto hasil jepretan Anda menjadi teks Base64
+                                bytes_data = img_camera.getvalue()
+                                cam_base64 = f"data:image/jpeg;base64,{base64.b64encode(bytes_data).decode('utf-8')}"
+                                
+                                st.info("Memproses kecocokan wajah di HP/Laptop Anda...")
+                                
+                                # 3. Injeksi AI HANYA untuk membandingkan 2 foto (Foto Admin vs Foto Jepretan)
+                                html_code = f"""
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+                                    <style>
+                                        body {{ text-align: center; font-family: sans-serif; margin: 0; }}
+                                        #status {{ margin-top: 10px; font-weight: bold; color: #d9534f; }}
+                                        #kode {{ margin-top: 15px; font-size: 22px; font-weight: bold; color: white; background: #5cb85c; padding: 10px; border-radius: 5px; display: none; }}
+                                    </style>
+                                </head>
+                                <body>
+                                    <div id="status">Memuat AI (Tunggu sebentar)...</div>
+                                    <div id="kode">KODE VALIDASI: <b>COCOK100</b></div>
+                                    
+                                    <!-- Foto dari Admin (Tidak Ditampilkan di Layar) -->
+                                    <img id="refImg" src="{emp_data['photo_base64']}" style="display:none;" />
+                                    <!-- Foto Hasil Jepretan Baru (Tidak Ditampilkan di Layar) -->
+                                    <img id="camImg" src="{cam_base64}" style="display:none;" />
 
-                                <script>
-                                    async function runAI() {{
-                                        const status = document.getElementById('status');
-                                        try {{
-                                            await faceapi.nets.ssdMobilenetv1.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
-                                            await faceapi.nets.faceLandmark68Net.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
-                                            await faceapi.nets.faceRecognitionNet.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
-                                            
-                                            status.innerText = "Model Siap! Menyiapkan kamera...";
-                                            
-                                            const refImg = document.getElementById('refImg');
-                                            const refDetect = await faceapi.detectSingleFace(refImg).withFaceLandmarks().withFaceDescriptor();
-                                            if(!refDetect) {{ status.innerText = "Wajah acuan buram. Minta admin upload ulang."; return; }}
-                                            const faceMatcher = new faceapi.FaceMatcher(refDetect);
-                                            
-                                            const video = document.getElementById('video');
-                                            const stream = await navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "user" }} }});
-                                            video.srcObject = stream;
-                                            
-                                            status.innerText = "Menganalisis wajah Anda... Arahkan wajah ke kamera!";
-                                            
-                                            setInterval(async () => {{
-                                                const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
-                                                if(detection) {{
-                                                    const match = faceMatcher.findBestMatch(detection.descriptor);
-                                                    if(match.distance <= 0.5) {{ 
-                                                        status.style.display = "none";
-                                                        document.getElementById('kode').style.display = "inline-block";
-                                                    }} else {{
-                                                        status.innerText = "Wajah tidak cocok. Jarak: " + match.distance.toFixed(2);
-                                                    }}
+                                    <script>
+                                        async function runAI() {{
+                                            const status = document.getElementById('status');
+                                            try {{
+                                                await faceapi.nets.ssdMobilenetv1.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+                                                await faceapi.nets.faceLandmark68Net.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+                                                await faceapi.nets.faceRecognitionNet.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+                                                
+                                                status.innerText = "Menganalisis dan membandingkan wajah...";
+                                                
+                                                const refImg = document.getElementById('refImg');
+                                                const camImg = document.getElementById('camImg');
+                                                
+                                                const refDetect = await faceapi.detectSingleFace(refImg).withFaceLandmarks().withFaceDescriptor();
+                                                const camDetect = await faceapi.detectSingleFace(camImg).withFaceLandmarks().withFaceDescriptor();
+                                                
+                                                if(!refDetect) {{ status.innerText = "Wajah acuan Admin tidak terdeteksi. Hubungi Admin."; return; }}
+                                                if(!camDetect) {{ status.innerText = "Wajah Anda tidak jelas di foto. Silakan foto ulang."; return; }}
+                                                
+                                                const faceMatcher = new faceapi.FaceMatcher(refDetect);
+                                                const match = faceMatcher.findBestMatch(camDetect.descriptor);
+                                                
+                                                if(match.distance <= 0.5) {{ 
+                                                    status.style.display = "none";
+                                                    document.getElementById('kode').style.display = "inline-block";
                                                 }} else {{
-                                                    status.innerText = "Wajah tidak terdeteksi di layar.";
+                                                    status.innerText = "⛔ WAJAH TIDAK COCOK. Jarak: " + match.distance.toFixed(2);
                                                 }}
-                                            }}, 1500);
-                                            
-                                        }} catch (err) {{
-                                            status.innerText = "Mohon Izinkan Akses Kamera di Browser Anda.";
+                                            }} catch (err) {{
+                                                status.innerText = "Gagal memuat AI. Pastikan internet stabil.";
+                                            }}
                                         }}
-                                    }}
-                                    runAI();
-                                </script>
-                            </body>
-                            </html>
-                            """
-                            
-                            components.html(html_code, height=450, scrolling=False)
-                            
-                            st.write("---")
-                            ver_kode = st.text_input("Masukkan KODE VALIDASI (jika wajah cocok di atas):")
-                            
-                            if ver_kode == "COCOK100":
-                                st.success("✅ Verifikasi Wajah Berhasil!")
-                                if st.button("Kirim Absensi Sekarang"):
-                                    now_mks = get_now_makassar()
-                                    new_att = {
-                                        'nip': emp_data['nip'], 'name': emp_data['name'],
-                                        'school_name': sch_data['school_name'], 'date': now_mks.strftime('%Y-%m-%d'),
-                                        'time_in': now_mks.strftime('%H:%M:%S'), 'status': 'Hadir' if now_mks.hour < 8 else 'Terlambat',
-                                        'lat': user_lat, 'lng': user_lng
-                                    }
-                                    st.session_state.attendances = pd.concat([st.session_state.attendances, pd.DataFrame([new_att])], ignore_index=True)
-                                    st.balloons()
-                                    st.success("Absensi berhasil dicatat!")
-                            elif ver_kode:
-                                st.error("Kode Validasi Salah!")
+                                        runAI();
+                                    </script>
+                                </body>
+                                </html>
+                                """
+                                components.html(html_code, height=150, scrolling=False)
+                                
+                                st.write("---")
+                                ver_kode = st.text_input("Masukkan KODE VALIDASI (Jika wajah cocok):")
+                                
+                                if ver_kode == "COCOK100":
+                                    st.success("✅ Verifikasi Wajah Berhasil!")
+                                    if st.button("Kirim Absensi Sekarang"):
+                                        # (Fungsi menyimpan data absen ke tabel)
+                                        now_mks = get_now_makassar()
+                                        new_att = {
+                                            'nip': emp_data['nip'], 'name': emp_data['name'],
+                                            'school_name': sch_data['school_name'], 'date': now_mks.strftime('%Y-%m-%d'),
+                                            'time_in': now_mks.strftime('%H:%M:%S'), 'status': 'Hadir' if now_mks.hour < 8 else 'Terlambat',
+                                            'lat': user_lat, 'lng': user_lng
+                                        }
+                                        st.session_state.attendances = pd.concat([st.session_state.attendances, pd.DataFrame([new_att])], ignore_index=True)
+                                        st.balloons()
+                                        st.success("Absensi berhasil dicatat!")
+                                elif ver_kode:
+                                    st.error("Kode Validasi Salah!")
                         else:
                             st.error("Admin Sekolah belum mengunggah foto acuan. Hubungi Admin.")
                     else:
