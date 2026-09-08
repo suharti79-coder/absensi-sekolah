@@ -9,35 +9,32 @@ from streamlit_geolocation import streamlit_geolocation
 import streamlit.components.v1 as components
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="Sistem Absensi GPS & Biometrik", page_icon="🏫", layout="centered")
+st.set_page_config(page_title="Sistem Absensi Terpadu", page_icon="🏫", layout="centered")
 
+# --- KONFIGURASI DATABASE CSV ---
 FILE_ABSENSI = "data_absensi.csv"
+FILE_SEKOLAH = "data_sekolah.csv"
+FILE_PEGAWAI = "data_pegawai.csv"
 
-def simpan_ke_csv(data_baru):
-    df_baru = pd.DataFrame([data_baru])
-    if os.path.exists(FILE_ABSENSI):
-        df_lama = pd.read_csv(FILE_ABSENSI)
-        df_final = pd.concat([df_lama, df_baru], ignore_index=True)
+def muat_data(nama_file, data_default):
+    if os.path.exists(nama_file):
+        return pd.read_csv(nama_file)
     else:
-        df_final = df_baru
-    df_final.to_csv(FILE_ABSENSI, index=False)
+        df = pd.DataFrame(data_default)
+        df.to_csv(nama_file, index=False)
+        return df
 
-# --- DATABASE SEKOLAH ---
+def simpan_data(df, nama_file):
+    df.to_csv(nama_file, index=False)
+
+# --- INISIALISASI DATABASE ---
 if 'schools' not in st.session_state:
-    st.session_state.schools = pd.DataFrame([
-        {'school_name': 'SD Negeri 1 Pusat', 'lat': -5.147665, 'lng': 119.432731, 'radius_m': 100},
-        {'school_name': 'SMP Negeri 2 Cabang', 'lat': -5.132159, 'lng': 119.444654, 'radius_m': 150},
-        # Tambahkan sekolah ke-3, ke-4, dan seterusnya di bawah ini:
-        {'school_name': 'SMA Negeri 3', 'lat': -5.123456, 'lng': 119.555555, 'radius_m': 100},
-        {'school_name': 'Kantor Dinas Pendidikan', 'lat': -5.111111, 'lng': 119.666666, 'radius_m': 50}
+    st.session_state.schools = muat_data(FILE_SEKOLAH, [
+        {'school_name': 'Sekolah Default', 'lat': -5.147665, 'lng': 119.432731, 'radius_m': 100}
     ])
 
-# --- DATABASE PEGAWAI ---
 if 'employees' not in st.session_state:
-    st.session_state.employees = pd.DataFrame([{
-        'nip': '12345', 'name': 'Budi Guru', 'school_name': 'SD Negeri 1 Pusat', 
-        'photo_uploaded': False, 'photo_base64': ''
-    }])
+    st.session_state.employees = muat_data(FILE_PEGAWAI, [])
 
 if 'role' not in st.session_state:
     st.session_state.role = None
@@ -49,11 +46,11 @@ def logout():
 # HALAMAN LOGIN UTAMA
 # ==========================================
 if st.session_state.role is None:
-    st.title("🚪 Portal Absensi Geolocation")
+    st.title("🚪 Portal Absensi Sekolah")
     pilihan_login = st.selectbox("Login Sebagai:", ["Pilih...", "Pegawai", "Admin", "Superadmin"])
     
     if pilihan_login == "Pegawai":
-        if st.button("Masuk sebagai Pegawai"):
+        if st.button("Masuk (Kamera Absensi)"):
             st.session_state.role = "Pegawai"
             st.rerun()
     elif pilihan_login == "Admin":
@@ -81,42 +78,42 @@ st.sidebar.button("🚪 Keluar (Logout)", on_click=logout)
 st.sidebar.write("---")
 
 # ==========================================
-# HAK AKSES 1: PEGAWAI (GPS & Kamera)
+# HAK AKSES 1: PEGAWAI
 # ==========================================
 if st.session_state.role == "Pegawai":
     st.title("📍 Presensi GPS & Wajah")
     
     if st.session_state.employees.empty:
-        st.warning("Belum ada data pegawai.")
+        st.warning("Belum ada data pegawai. Hubungi Superadmin.")
     else:
         pegawai_pilihan = st.selectbox("Pilih Nama Anda:", st.session_state.employees['name'].tolist())
         emp_data = st.session_state.employees[st.session_state.employees['name'] == pegawai_pilihan].iloc[0]
         
-        # Ambil Data Sekolah Pegawai tsb
-        sch_data = st.session_state.schools[st.session_state.schools['school_name'] == emp_data['school_name']].iloc[0]
-        
+        try:
+            sch_data = st.session_state.schools[st.session_state.schools['school_name'] == emp_data['school_name']].iloc[0]
+        except IndexError:
+            st.error("Data sekolah untuk pegawai ini tidak ditemukan atau telah dihapus.")
+            st.stop()
+            
         st.info(f"🏫 Anda ditugaskan di: **{sch_data['school_name']}**")
         st.write("Klik tombol di bawah untuk mendeteksi lokasi Anda saat ini.")
         
-        # 1. Pengecekan GPS
         lokasi_user = streamlit_geolocation()
         
         if lokasi_user['latitude'] is not None and lokasi_user['longitude'] is not None:
             user_lat = lokasi_user['latitude']
             user_lng = lokasi_user['longitude']
             
-            # Hitung Jarak
-            jarak_meter = geopy.distance.geodesic(
-                (user_lat, user_lng), 
-                (sch_data['lat'], sch_data['lng'])
-            ).meters
+            jarak_meter = geopy.distance.geodesic((user_lat, user_lng), (sch_data['lat'], sch_data['lng'])).meters
             
             if jarak_meter <= sch_data['radius_m']:
-                st.success(f"✅ Lokasi Valid! Anda berada {jarak_meter:.0f} meter dari titik pusat sekolah.")
-                
-                # 2. Buka Kamera Jika GPS Valid
+                st.success(f"✅ Lokasi Valid! Anda berada {jarak_meter:.0f} meter dari pusat sekolah.")
                 st.markdown("### Rekam Wajah")
-                if emp_data['photo_uploaded'] and emp_data['photo_base64'] != '':
+                
+                # Cek tipe data karena format CSV kadang membaca boolean sebagai string
+                is_uploaded = str(emp_data['photo_uploaded']).lower() == 'true'
+                
+                if is_uploaded and pd.notna(emp_data['photo_base64']):
                     img_camera = st.camera_input("Ambil Foto Wajah Anda")
                     if img_camera:
                         bytes_data = img_camera.getvalue()
@@ -163,34 +160,43 @@ if st.session_state.role == "Pegawai":
                         if ver_kode == "COCOK100":
                             if st.button("Kirim Absensi"):
                                 now = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
-                                simpan_ke_csv({
+                                # Baca absen lama, tambah baru, simpan
+                                data_absen_baru = pd.DataFrame([{
                                     'NIP': emp_data['nip'], 'Nama': emp_data['name'], 'Sekolah': sch_data['school_name'],
                                     'Tanggal': now.strftime('%Y-%m-%d'), 'Jam': now.strftime('%H:%M:%S'),
                                     'Jarak (m)': round(jarak_meter, 1), 'Status': 'Hadir'
-                                })
+                                }])
+                                df_lama = pd.read_csv(FILE_ABSENSI) if os.path.exists(FILE_ABSENSI) else pd.DataFrame()
+                                df_final = pd.concat([df_lama, data_absen_baru], ignore_index=True)
+                                simpan_data(df_final, FILE_ABSENSI)
                                 st.success("Absensi sukses!")
                 else:
                     st.warning("Admin belum mengunggah foto acuan Anda.")
             else:
-                st.error(f"⛔ Akses Ditolak! Jarak Anda {jarak_meter:.0f} meter. Anda berada di luar radius {sch_data['radius_m']} meter dari sekolah.")
+                st.error(f"⛔ Akses Ditolak! Jarak Anda {jarak_meter:.0f} meter. Anda berada di luar radius {sch_data['radius_m']} meter.")
         else:
-            st.warning("Menunggu akses GPS. Mohon izinkan lokasi di browser Anda.")
+            st.warning("Menunggu akses GPS. Mohon izinkan lokasi di browser.")
 
 # ==========================================
-# HAK AKSES 2: ADMIN (Foto & Laporan)
+# HAK AKSES 2: ADMIN
 # ==========================================
 elif st.session_state.role == "Admin":
     st.title("🔐 Dashboard Admin")
-    st.markdown("### 1. Upload Foto Acuan")
-    pilihan_guru = st.selectbox("Pilih Pegawai:", st.session_state.employees['name'].tolist())
-    idx = st.session_state.employees.index[st.session_state.employees['name'] == pilihan_guru][0]
     
-    foto = st.file_uploader("Upload Pas Foto", type=['jpg', 'jpeg', 'png'])
-    if foto and st.button("Simpan Foto"):
-        base64_str = base64.b64encode(foto.getvalue()).decode('utf-8')
-        st.session_state.employees.at[idx, 'photo_uploaded'] = True
-        st.session_state.employees.at[idx, 'photo_base64'] = f"data:image/jpeg;base64,{base64_str}"
-        st.success("Foto dikunci!")
+    if st.session_state.employees.empty:
+         st.warning("Belum ada data pegawai. Minta Superadmin menambah pegawai terlebih dahulu.")
+    else:
+        st.markdown("### 1. Upload Foto Acuan")
+        pilihan_guru = st.selectbox("Pilih Pegawai:", st.session_state.employees['name'].tolist())
+        idx = st.session_state.employees.index[st.session_state.employees['name'] == pilihan_guru][0]
+        
+        foto = st.file_uploader("Upload Pas Foto", type=['jpg', 'jpeg', 'png'])
+        if foto and st.button("Simpan Foto"):
+            base64_str = base64.b64encode(foto.getvalue()).decode('utf-8')
+            st.session_state.employees.at[idx, 'photo_uploaded'] = True
+            st.session_state.employees.at[idx, 'photo_base64'] = f"data:image/jpeg;base64,{base64_str}"
+            simpan_data(st.session_state.employees, FILE_PEGAWAI) # Simpan permanen ke CSV
+            st.success("Foto dikunci dan disimpan secara permanen!")
 
     st.markdown("### 2. Laporan")
     if os.path.exists(FILE_ABSENSI):
@@ -199,25 +205,72 @@ elif st.session_state.role == "Admin":
         st.download_button("📥 Download", data=df.to_csv(index=False).encode('utf-8'), file_name="Absensi.csv")
 
 # ==========================================
-# HAK AKSES 3: SUPERADMIN (Tambah Guru & Penempatan Sekolah)
+# HAK AKSES 3: SUPERADMIN
 # ==========================================
 elif st.session_state.role == "Superadmin":
     st.title("🛠️ Dashboard Superadmin")
-    st.markdown("### Tambah Pegawai & Penempatan")
     
-    with st.form("form_tambah"):
-        new_nip = st.text_input("NIP")
-        new_name = st.text_input("Nama Lengkap")
-        # Superadmin menempatkan guru di sekolah tertentu
-        new_school = st.selectbox("Penempatan Sekolah", st.session_state.schools['school_name'].tolist())
-        
-        if st.form_submit_button("Tambahkan"):
-            if new_nip and new_name:
-                new_emp = pd.DataFrame([{
-                    'nip': new_nip, 'name': new_name, 'school_name': new_school, 
-                    'photo_uploaded': False, 'photo_base64': ''
-                }])
-                st.session_state.employees = pd.concat([st.session_state.employees, new_emp], ignore_index=True)
-                st.success(f"Pegawai ditambahkan ke {new_school}!")
-                
-    st.dataframe(st.session_state.employees[['nip', 'name', 'school_name', 'photo_uploaded']])
+    # --- TAB MENU SUPERADMIN ---
+    tab1, tab2, tab3 = st.tabs(["🏛️ Kelola Sekolah", "👥 Kelola Pegawai", "🚨 Database"])
+    
+    # --- TAB 1: KELOLA SEKOLAH ---
+    with tab1:
+        st.markdown("### Tambah Titik Sekolah Baru")
+        st.info("Buka Google Maps, klik kanan pada lokasi sekolah, salin angka koordinatnya.")
+        with st.form("form_sekolah"):
+            new_sch_name = st.text_input("Nama Sekolah / Area Lokasi")
+            col_lat, col_lng = st.columns(2)
+            with col_lat:
+                new_lat = st.number_input("Latitude (Cth: -5.147665)", format="%.6f")
+            with col_lng:
+                new_lng = st.number_input("Longitude (Cth: 119.432731)", format="%.6f")
+            new_rad = st.number_input("Radius Akses (Meter)", min_value=10, value=100)
+            
+            if st.form_submit_button("Simpan Sekolah"):
+                if new_sch_name:
+                    new_sch_df = pd.DataFrame([{'school_name': new_sch_name, 'lat': new_lat, 'lng': new_lng, 'radius_m': new_rad}])
+                    st.session_state.schools = pd.concat([st.session_state.schools, new_sch_df], ignore_index=True)
+                    simpan_data(st.session_state.schools, FILE_SEKOLAH)
+                    st.success(f"Sekolah {new_sch_name} berhasil ditambahkan!")
+                else:
+                    st.error("Nama sekolah tidak boleh kosong.")
+                    
+        st.markdown("### Daftar Sekolah Aktif")
+        st.dataframe(st.session_state.schools)
+
+    # --- TAB 2: KELOLA PEGAWAI ---
+    with tab2:
+        st.markdown("### Tambah Pegawai & Penempatan")
+        with st.form("form_tambah_pegawai"):
+            new_nip = st.text_input("NIP")
+            new_name = st.text_input("Nama Lengkap")
+            new_school = st.selectbox("Penempatan Sekolah", st.session_state.schools['school_name'].tolist())
+            
+            if st.form_submit_button("Tambahkan Pegawai"):
+                if new_nip and new_name:
+                    new_emp = pd.DataFrame([{
+                        'nip': new_nip, 'name': new_name, 'school_name': new_school, 
+                        'photo_uploaded': False, 'photo_base64': ''
+                    }])
+                    st.session_state.employees = pd.concat([st.session_state.employees, new_emp], ignore_index=True)
+                    simpan_data(st.session_state.employees, FILE_PEGAWAI)
+                    st.success(f"Pegawai ditambahkan ke {new_school}!")
+                    
+        st.markdown("### Daftar Pegawai Aktif")
+        if not st.session_state.employees.empty:
+            st.dataframe(st.session_state.employees[['nip', 'name', 'school_name', 'photo_uploaded']])
+
+    # --- TAB 3: ZONA BERBAHAYA ---
+    with tab3:
+        st.markdown("### Reset Data Sistem")
+        st.warning("Perhatian! Menghapus data di sini tidak dapat dikembalikan.")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Kosongkan Data Absensi"):
+                if os.path.exists(FILE_ABSENSI): os.remove(FILE_ABSENSI)
+                st.success("Tabel absensi dibersihkan!")
+        with col2:
+            if st.button("🚨 Reset Semua Pegawai"):
+                if os.path.exists(FILE_PEGAWAI): os.remove(FILE_PEGAWAI)
+                st.session_state.employees = pd.DataFrame()
+                st.success("Data pegawai telah di-reset.")
