@@ -15,6 +15,9 @@ st.set_page_config(page_title="Sistem Absensi Terpadu", page_icon="🏫", layout
 FILE_ABSENSI = "data_absensi.csv"
 FILE_SEKOLAH = "data_sekolah.csv"
 FILE_PEGAWAI = "data_pegawai.csv"
+DIR_SURAT = "surat_izin"
+if not os.path.exists(DIR_SURAT):
+    os.makedirs(DIR_SURAT)
 
 def muat_data(nama_file, data_default, kolom_default=None):
     if os.path.exists(nama_file):
@@ -215,7 +218,7 @@ elif st.session_state.role == "Admin":
 elif st.session_state.role == "Superadmin":
     st.title("🛠️ Dashboard Superadmin")
     
-    tab1, tab2, tab3 = st.tabs(["🏛️ Kelola Sekolah", "👥 Kelola Pegawai", "🚨 Database"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🏛️ Kelola Sekolah", "👥 Kelola Pegawai", "📝 Input Izin/Dinas", "🚨 Database"])
     
     # --- TAB 1: KELOLA SEKOLAH ---
     with tab1:
@@ -317,8 +320,53 @@ elif st.session_state.role == "Superadmin":
         if not st.session_state.employees.empty:
             st.dataframe(st.session_state.employees[['nip', 'name', 'school_name', 'photo_uploaded']])
 
-    # --- TAB 3: ZONA BERBAHAYA ---
+# --- TAB 3: INPUT IZIN / SAKIT / DINAS LUAR ---
     with tab3:
+        st.markdown("### 📝 Input Keterangan Absensi (Manual)")
+        st.info("Gunakan menu ini jika pegawai berhalangan hadir karena Sakit, Izin, atau tugas Dinas Luar.")
+        
+        if st.session_state.employees.empty:
+            st.warning("Belum ada data pegawai.")
+        else:
+            with st.form("form_izin"):
+                pilihan_pegawai = st.selectbox("Pilih Pegawai:", st.session_state.employees['name'].tolist())
+                jenis_absen = st.selectbox("Status Kehadiran:", ["Sakit", "Izin", "Dinas Luar"])
+                tanggal_absen = st.date_input("Tanggal Keterangan")
+                file_surat = st.file_uploader("Upload Bukti Surat (PDF/JPG/PNG)", type=['pdf', 'jpg', 'jpeg', 'png'])
+                
+                if st.form_submit_button("Simpan Data Absensi"):
+                    if file_surat is not None:
+                        # Ambil data NIP dan Sekolah pegawai yang dipilih
+                        emp_data = st.session_state.employees[st.session_state.employees['name'] == pilihan_pegawai].iloc[0]
+                        
+                        # Buat nama file unik dan simpan ke folder
+                        file_ext = file_surat.name.split('.')[-1]
+                        file_name = f"{emp_data['nip']}_{jenis_absen}_{tanggal_absen.strftime('%Y%m%d')}.{file_ext}"
+                        file_path = os.path.join(DIR_SURAT, file_name)
+                        
+                        with open(file_path, "wb") as f:
+                            f.write(file_surat.getbuffer())
+                        
+                        # Simpan ke CSV absensi
+                        data_absen_baru = pd.DataFrame([{
+                            'NIP': emp_data['nip'], 
+                            'Nama': emp_data['name'], 
+                            'Sekolah': emp_data['school_name'],
+                            'Tanggal': tanggal_absen.strftime('%Y-%m-%d'), 
+                            'Jam': '-',
+                            'Jarak (m)': 'Dilampirkan Surat', 
+                            'Status': jenis_absen
+                        }])
+                        
+                        df_lama = pd.read_csv(FILE_ABSENSI) if os.path.exists(FILE_ABSENSI) else pd.DataFrame()
+                        df_final = pd.concat([df_lama, data_absen_baru], ignore_index=True)
+                        simpan_data(df_final, FILE_ABSENSI)
+                        
+                        st.success(f"Berhasil! Absensi {jenis_absen} untuk {pilihan_pegawai} telah tercatat dan surat telah disimpan.")
+                    else:
+                        st.error("Harap unggah file bukti surat terlebih dahulu sebelum menyimpan.")
+    # --- TAB 3: ZONA BERBAHAYA ---
+    with tab4:
         st.markdown("### Reset Data Sistem")
         st.warning("Perhatian! Menghapus data di sini tidak dapat dikembalikan.")
         col1, col2 = st.columns(2)
