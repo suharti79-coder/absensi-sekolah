@@ -230,17 +230,34 @@ elif st.session_state.role == "Superadmin":
                 new_lng = st.number_input("Longitude (Cth: 119.432731)", format="%.6f")
             new_rad = st.number_input("Radius Akses (Meter)", min_value=10, value=100)
             
-            if st.form_submit_button("Simpan Sekolah"):
+            if st.form_submit_button("Simpan Sekolah Baru"):
                 if new_sch_name:
                     new_sch_df = pd.DataFrame([{'school_name': new_sch_name, 'lat': new_lat, 'lng': new_lng, 'radius_m': new_rad}])
                     st.session_state.schools = pd.concat([st.session_state.schools, new_sch_df], ignore_index=True)
                     simpan_data(st.session_state.schools, FILE_SEKOLAH)
                     st.success(f"Sekolah {new_sch_name} berhasil ditambahkan!")
+                    st.rerun()
                 else:
                     st.error("Nama sekolah tidak boleh kosong.")
                     
-        st.markdown("### Daftar Sekolah Aktif")
-        st.dataframe(st.session_state.schools)
+        st.write("---")
+        st.markdown("### ✏️ Edit & Kelola Sekolah Aktif")
+        st.info("💡 **Cara Edit:** Klik dua kali pada sel tabel di bawah untuk mengubah angka (Koordinat/Radius). **Cara Hapus:** Centang kotak kosong di sisi paling kiri tabel, lalu tekan ikon tempat sampah. Jika sudah selesai, **WAJIB** klik tombol Simpan di bawah tabel.")
+        
+        # Fitur Spreadsheet Interaktif
+        edited_schools = st.data_editor(
+            st.session_state.schools,
+            num_rows="dynamic", # Mengizinkan fitur hapus baris (delete)
+            use_container_width=True,
+            key="school_editor"
+        )
+        
+        # Tombol untuk menyimpan hasil editan secara permanen
+        if st.button("💾 Simpan Perubahan Tabel", type="primary"):
+            st.session_state.schools = edited_schools
+            simpan_data(st.session_state.schools, FILE_SEKOLAH)
+            st.success("Perubahan data sekolah berhasil disimpan secara permanen!")
+            st.rerun()
 
     # --- TAB 2: KELOLA PEGAWAI ---
     with tab2:
