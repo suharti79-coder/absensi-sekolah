@@ -127,7 +127,8 @@ def public_landing_page():
                                 <!DOCTYPE html>
                                 <html>
                                 <head>
-                                    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+                                    <!-- Menggunakan CDN Face-API terbaru & bebas blokir CORS -->
+                                    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
                                     <style>
                                         body {{ text-align: center; font-family: sans-serif; margin: 0; }}
                                         #status {{ margin-top: 10px; font-weight: bold; color: #d9534f; }}
@@ -138,20 +139,21 @@ def public_landing_page():
                                     <div id="status">Memuat AI (Tunggu sebentar)...</div>
                                     <div id="kode">KODE VALIDASI: <b>COCOK100</b></div>
                                     
-                                    <!-- Foto dari Admin (Tidak Ditampilkan di Layar) -->
                                     <img id="refImg" src="{emp_data['photo_base64']}" style="display:none;" />
-                                    <!-- Foto Hasil Jepretan Baru (Tidak Ditampilkan di Layar) -->
                                     <img id="camImg" src="{cam_base64}" style="display:none;" />
 
                                     <script>
                                         async function runAI() {{
                                             const status = document.getElementById('status');
                                             try {{
-                                                await faceapi.nets.ssdMobilenetv1.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
-                                                await faceapi.nets.faceLandmark68Net.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
-                                                await faceapi.nets.faceRecognitionNet.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+                                                // Tautan model baru dari jsDelivr CDN
+                                                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model';
                                                 
-                                                status.innerText = "Menganalisis dan membandingkan wajah...";
+                                                await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+                                                await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+                                                await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+                                                
+                                                status.innerText = "Menganalisis kecocokan wajah...";
                                                 
                                                 const refImg = document.getElementById('refImg');
                                                 const camImg = document.getElementById('camImg');
@@ -159,8 +161,14 @@ def public_landing_page():
                                                 const refDetect = await faceapi.detectSingleFace(refImg).withFaceLandmarks().withFaceDescriptor();
                                                 const camDetect = await faceapi.detectSingleFace(camImg).withFaceLandmarks().withFaceDescriptor();
                                                 
-                                                if(!refDetect) {{ status.innerText = "Wajah acuan Admin tidak terdeteksi. Hubungi Admin."; return; }}
-                                                if(!camDetect) {{ status.innerText = "Wajah Anda tidak jelas di foto. Silakan foto ulang."; return; }}
+                                                if(!refDetect) {{ 
+                                                    status.innerText = "Wajah foto acuan Admin tidak terdeteksi. Hubungi Admin."; 
+                                                    return; 
+                                                }}
+                                                if(!camDetect) {{ 
+                                                    status.innerText = "Wajah Anda tidak terdeteksi pada foto jepretan. Silakan ambil foto ulang."; 
+                                                    return; 
+                                                }}
                                                 
                                                 const faceMatcher = new faceapi.FaceMatcher(refDetect);
                                                 const match = faceMatcher.findBestMatch(camDetect.descriptor);
@@ -169,13 +177,14 @@ def public_landing_page():
                                                     status.style.display = "none";
                                                     document.getElementById('kode').style.display = "inline-block";
                                                 }} else {{
-                                                    status.innerText = "⛔ WAJAH TIDAK COCOK. Jarak: " + match.distance.toFixed(2);
+                                                    status.innerText = "⛔ WAJAH TIDAK COCOK! (Jarak Kemiripan: " + match.distance.toFixed(2) + ")";
                                                 }}
                                             }} catch (err) {{
-                                                status.innerText = "Gagal memuat AI. Pastikan internet stabil.";
+                                                status.innerText = "Gagal memuat AI: " + err.message;
                                             }}
                                         }}
-                                        runAI();
+                                        // Berikan jeda sedikit agar pustaka ter-load sempurna
+                                        setTimeout(runAI, 500);
                                     </script>
                                 </body>
                                 </html>
