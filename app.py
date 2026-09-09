@@ -470,34 +470,51 @@ elif st.session_state.role == "Superadmin":
             with st.form("form_izin"):
                 pilihan_pegawai = st.selectbox("Pilih Pegawai:", st.session_state.employees['name'].tolist())
                 jenis_absen = st.selectbox("Status Kehadiran:", ["Sakit", "Izin", "Cuti", "Dinas Luar"])
-                tanggal_absen = st.date_input("Tanggal Keterangan")
+                
+                # Pembaruan: Input rentang tanggal
+                col_tgl1, col_tgl2 = st.columns(2)
+                with col_tgl1:
+                    tanggal_mulai = st.date_input("Dari Tanggal")
+                with col_tgl2:
+                    tanggal_selesai = st.date_input("Sampai Tanggal")
+                    
                 file_surat = st.file_uploader("Upload Bukti Surat (PDF/JPG/PNG)", type=['pdf', 'jpg', 'jpeg', 'png'])
                 
                 if st.form_submit_button("Simpan Data Absensi"):
-                    if file_surat is not None:
+                    if tanggal_selesai < tanggal_mulai:
+                        st.error("Error: 'Sampai Tanggal' tidak boleh lebih awal dari 'Dari Tanggal'.")
+                    elif file_surat is not None:
                         emp_data = st.session_state.employees[st.session_state.employees['name'] == pilihan_pegawai].iloc[0]
                         file_ext = file_surat.name.split('.')[-1]
-                        file_name = f"{emp_data['nip']}_{jenis_absen}_{tanggal_absen.strftime('%Y%m%d')}.{file_ext}"
+                        file_name = f"{emp_data['nip']}_{jenis_absen}_{tanggal_mulai.strftime('%Y%m%d')}_sd_{tanggal_selesai.strftime('%Y%m%d')}.{file_ext}"
                         file_path = os.path.join(DIR_SURAT, file_name)
                         
                         with open(file_path, "wb") as f:
                             f.write(file_surat.getbuffer())
                         
-                        data_absen_baru = pd.DataFrame([{
-                            'NIP': emp_data['nip'], 
-                            'Nama': emp_data['name'], 
-                            'Sekolah': emp_data['school_name'],
-                            'Tanggal': tanggal_absen.strftime('%Y-%m-%d'), 
-                            'Jam': '-',
-                            'Jarak (m)': 'Dilampirkan Surat', 
-                            'Status': jenis_absen
-                        }])
+                        # Menghitung selisih hari dan membuat data untuk setiap harinya
+                        delta = tanggal_selesai - tanggal_mulai
+                        daftar_tanggal = [tanggal_mulai + datetime.timedelta(days=i) for i in range(delta.days + 1)]
+                        
+                        list_absen = []
+                        for tgl in daftar_tanggal:
+                            list_absen.append({
+                                'NIP': emp_data['nip'], 
+                                'Nama': emp_data['name'], 
+                                'Sekolah': emp_data['school_name'],
+                                'Tanggal': tgl.strftime('%Y-%m-%d'), 
+                                'Jam': '-',
+                                'Jarak (m)': 'Dilampirkan Surat', 
+                                'Status': jenis_absen
+                            })
+                            
+                        data_absen_baru = pd.DataFrame(list_absen)
                         
                         df_lama = pd.read_csv(FILE_ABSENSI) if os.path.exists(FILE_ABSENSI) else pd.DataFrame()
                         df_final = pd.concat([df_lama, data_absen_baru], ignore_index=True)
                         simpan_data(df_final, FILE_ABSENSI)
                         
-                        st.success(f"Berhasil! Absensi {jenis_absen} untuk {pilihan_pegawai} telah tercatat dan surat telah disimpan.")
+                        st.success(f"Berhasil! Absensi {jenis_absen} untuk {pilihan_pegawai} dari {tanggal_mulai.strftime('%d-%m-%Y')} s/d {tanggal_selesai.strftime('%d-%m-%Y')} telah tercatat.")
                     else:
                         st.error("Harap unggah file bukti surat terlebih dahulu sebelum menyimpan.")
                         
