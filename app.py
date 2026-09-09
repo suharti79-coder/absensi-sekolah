@@ -317,6 +317,8 @@ elif st.session_state.role == "Admin":
                 right_on='NIP',
                 how='left'
             )
+            # Mencegah duplikasi kolom NIP
+            df_rekap = df_rekap.drop(columns=['NIP'])
         else:
             df_rekap = df_emp[['nip', 'name', 'school_name']].copy()
             df_rekap['Jam'] = '-'
