@@ -87,15 +87,19 @@ st.sidebar.success(f"Akses: **{st.session_state.role}**")
 st.sidebar.button("🚪 Keluar (Logout)", on_click=logout)
 st.sidebar.write("---")
 
-# --- TAMBAHAN KODE JAM SERVER ---
+# ==========================================
+# SIDEBAR
+# ==========================================
+st.sidebar.title("Informasi Akun")
+st.sidebar.success(f"Akses: **{st.session_state.role}**")
+st.sidebar.button("🚪 Keluar (Logout)", on_click=logout)
+st.sidebar.write("---")
+
+# Tampilan Jam Server WITA
 waktu_sekarang = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
 st.sidebar.markdown("**Waktu Server (WITA):**")
 st.sidebar.info(f"🕒 {waktu_sekarang.strftime('%H:%M:%S')} WITA\n\n📅 {waktu_sekarang.strftime('%d-%m-%Y')}")
 st.sidebar.caption("Jam ini yang akan terekam di absensi, terlepas dari pengaturan jam di HP Anda.")
-st.sidebar.write("---")
-st.sidebar.title("Informasi Akun")
-st.sidebar.success(f"Akses: **{st.session_state.role}**")
-st.sidebar.button("🚪 Keluar (Logout)", on_click=logout)
 st.sidebar.write("---")
 
 # ==========================================
