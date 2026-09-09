@@ -201,9 +201,9 @@ if st.session_state.role == "Pegawai":
                         <!DOCTYPE html>
                         <html>
                         <head><script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script></head>
-                        <body style="text-align: center; font-family: sans-serif;">
-                            <div id="status" style="color:#d9534f; font-weight:bold;">Memuat AI...</div>
-                            <div id="kode" style="display:none; color:white; background:#5cb85c; padding:10px; border-radius:5px; font-weight:bold; font-size:20px;">KODE: COCOK100</div>
+                        <body style="text-align: center; font-family: sans-serif; margin:0; padding:5px;">
+                            <div id="status" style="color:#d9534f; font-weight:bold;">Memuat AI Verifikasi...</div>
+                            <div id="kode" style="display:none; color:white; background:#5cb85c; padding:8px 15px; border-radius:5px; font-weight:bold; font-size:18px;">✅ WAJAH COCOK</div>
                             <img id="refImg" src="{emp_data['photo_base64']}" style="display:none;" />
                             <img id="camImg" src="{cam_base64}" style="display:none;" />
                             <script>
@@ -218,62 +218,38 @@ if st.session_state.role == "Pegawai":
                                         const ref = await faceapi.detectSingleFace(document.getElementById('refImg')).withFaceLandmarks().withFaceDescriptor();
                                         const cam = await faceapi.detectSingleFace(document.getElementById('camImg')).withFaceLandmarks().withFaceDescriptor();
                                         
-                                        if(!ref || !cam) {{ status.innerText = "Wajah tidak terdeteksi jelas."; return; }}
+                                        if(!ref || !cam) {{ status.innerText = "⚠️ Wajah tidak terdeteksi jelas pada kamera."; return; }}
                                         
                                         const match = new faceapi.FaceMatcher(ref).findBestMatch(cam.descriptor);
                                         if(match.distance <= 0.5) {{ 
                                             status.style.display = "none";
                                             document.getElementById('kode').style.display = "inline-block";
-                                            
-                                            const streamLitInput = window.parent.document.querySelector('div[data-testid="stTextInput"] input');
-                                            if (streamLitInput) {{
-                                                let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                                                nativeInputValueSetter.call(streamLitInput, "COCOK100");
-                                                streamLitInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                                                streamLitInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
-
-                                                setTimeout(() => {{
-                                                    const buttons = Array.from(window.parent.document.querySelectorAll('button'));
-                                                    const submitBtn = buttons.find(btn => btn.innerText.includes('Kirim'));
-                                                    if (submitBtn) {{
-                                                        submitBtn.click();
-                                                    }}
-                                                }}, 1000);
-                                            }}
                                         }} else {{ status.innerText = "⛔ WAJAH TIDAK COCOK!"; }}
-                                    }} catch(e) {{ status.innerText = "Gagal memuat AI."; }}
+                                    }} catch(e) {{ status.innerText = "Gagal memuat sistem verifikasi AI."; }}
                                 }}
                                 setTimeout(runAI, 500);
                             </script>
                         </body>
                         </html>
                         """
-                        components.html(html_code, height=80, scrolling=False)
+                        components.html(html_code, height=60, scrolling=False)
                         
-                        ver_kode = st.text_input("Ketik KODE di atas:")
-                        st.markdown("""
-                            <style>
-                            div[data-testid="stTextInput"] {
-                                display: none !important;
-                                visibility: hidden !important;
-                                height: 0px !important;
-                                margin: 0px !important;
-                                padding: 0px !important;
-                            }
-                            </style>
-                        """, unsafe_allow_html=True)
-                        if ver_kode == "COCOK100":
-                            if st.button("Kirim Absensi"):
-                                now = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
-                                data_absen_baru = pd.DataFrame([{
-                                    'NIP': emp_data['nip'], 'Nama': emp_data['name'], 'Sekolah': sch_data['school_name'],
-                                    'Tanggal': now.strftime('%Y-%m-%d'), 'Jam': now.strftime('%H:%M:%S'),
-                                    'Jarak (m)': round(jarak_meter, 1), 'Status': 'Hadir'
-                                }])
-                                df_lama = pd.read_csv(FILE_ABSENSI) if os.path.exists(FILE_ABSENSI) else pd.DataFrame()
-                                df_final = pd.concat([df_lama, data_absen_baru], ignore_index=True)
-                                simpan_data(df_final, FILE_ABSENSI)
-                                st.success("Absensi sukses tersimpan ke database!")
+                        # Tombol Simpan Absensi Resmi
+                        if st.button("💾 Kirim & Simpan Absensi", type="primary", use_container_width=True):
+                            now = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
+                            data_absen_baru = pd.DataFrame([{
+                                'NIP': emp_data['nip'], 
+                                'Nama': emp_data['name'], 
+                                'Sekolah': sch_data['school_name'],
+                                'Tanggal': now.strftime('%Y-%m-%d'), 
+                                'Jam': now.strftime('%H:%M:%S'),
+                                'Jarak (m)': round(jarak_meter, 1), 
+                                'Status': 'Hadir'
+                            }])
+                            df_lama = pd.read_csv(FILE_ABSENSI) if os.path.exists(FILE_ABSENSI) else pd.DataFrame()
+                            df_final = pd.concat([df_lama, data_absen_baru], ignore_index=True)
+                            simpan_data(df_final, FILE_ABSENSI)
+                            st.success("✅ Absensi sukses tersimpan ke database Admin!")
                 else:
                     st.warning("Admin belum mengunggah foto acuan Anda.")
             else:
@@ -306,11 +282,16 @@ elif st.session_state.role == "Admin":
             simpan_data(st.session_state.employees, FILE_PEGAWAI)
             st.success("Foto dikunci dan disimpan secara permanen!")
 
-    st.markdown("### 2. Laporan")
+    st.markdown("### 2. Laporan Absensi")
     if os.path.exists(FILE_ABSENSI):
         df = pd.read_csv(FILE_ABSENSI)
-        st.dataframe(df)
-        st.download_button("📥 Download Laporan", data=df.to_csv(index=False).encode('utf-8'), file_name="Absensi.csv")
+        if not df.empty:
+            st.dataframe(df, use_container_width=True)
+            st.download_button("📥 Download Laporan (CSV)", data=df.to_csv(index=False).encode('utf-8'), file_name="Rekap_Absensi.csv")
+        else:
+            st.info("Belum ada data absensi yang masuk.")
+    else:
+        st.info("Belum ada data absensi yang masuk.")
 
 # ==========================================
 # HAK AKSES 3: SUPERADMIN
