@@ -84,15 +84,7 @@ if st.session_state.role is None:
 # ==========================================
 st.sidebar.title("Informasi Akun")
 st.sidebar.success(f"Akses: **{st.session_state.role}**")
-st.sidebar.button("🚪 Keluar (Logout)", on_click=logout)
-st.sidebar.write("---")
-
-# ==========================================
-# SIDEBAR
-# ==========================================
-st.sidebar.title("Informasi Akun")
-st.sidebar.success(f"Akses: **{st.session_state.role}**")
-st.sidebar.button("🚪 Keluar (Logout)", on_click=logout)
+st.sidebar.button("🚪 Keluar (Logout)", on_click=logout, key="btn_logout_utama")
 st.sidebar.write("---")
 
 # Tampilan Jam Server WITA
