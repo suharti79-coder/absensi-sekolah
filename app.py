@@ -14,18 +14,23 @@ st.set_page_config(page_title="Sistem Absensi Sekolah Cabdis Wil IV", page_icon=
 # --- KUSTOMISASI TAMPILAN (CUSTOM CSS) ---
 st.markdown("""
     <style>
-    /* Import Font Modern */
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
     html, body, [class*="css"] {
         font-family: 'Poppins', sans-serif !important;
     }
 
-    # Sembunyikan Header & Footer Bawaan Streamlit
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
+    /* SEMBUNYIKAN ATRIBUT STREAMLIT */
+    header {visibility: hidden !important; height: 0px !important;} 
+    [data-testid="stToolbar"] {visibility: hidden !important;} 
+    [data-testid="stDecoration"] {visibility: hidden !important;} 
+    footer {visibility: hidden !important;} 
+    #MainMenu {visibility: hidden !important;}
 
-    # Styling Kartu / Container
+    /* Geser konten utama ke atas menutupi ruang kosong header */
+    .block-container { padding-top: 2rem !important; }
+
+    /* Styling Kartu */
     .stForm, div[data-testid="stExpander"] {
         background-color: #FFFFFF;
         padding: 24px;
@@ -34,9 +39,9 @@ st.markdown("""
         border: 1px solid #E2E8F0;
     }
 
-    # Styling Semua Tombol
+    /* Styling Tombol */
     div.stButton > button {
-        background-color: #2563EB !important; /* Warna Biru */
+        background-color: #2563EB !important; 
         color: white !important;
         font-weight: 600 !important;
         border-radius: 8px !important;
@@ -45,11 +50,11 @@ st.markdown("""
     }
     
     div.stButton > button:hover {
-        background-color: #1D4ED8 !important; /* Warna Biru Gelap saat disorot */
+        background-color: #1D4ED8 !important; 
         box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
     }
     
-    # Styling Sidebar agar rapi dan teks tetap gelap
+    /* Styling Sidebar */
     [data-testid="stSidebar"] {
         background-color: #F8FAFC !important;
         border-right: 1px solid #E2E8F0;
