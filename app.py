@@ -225,7 +225,7 @@ if st.session_state.role == "Pegawai":
                         
                         ver_kode = st.text_input("Ketik KODE di atas:")
                         # Menyembunyikan kotak input secara visual agar tidak diketik manual
-                            st.markdown("""
+                        st.markdown("""
                             <style>
                             div[data-testid="stTextInput"] {
                                 display: none !important;
