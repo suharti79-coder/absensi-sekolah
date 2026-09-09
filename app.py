@@ -224,6 +224,18 @@ if st.session_state.role == "Pegawai":
                         components.html(html_code, height=80, scrolling=False)
                         
                         ver_kode = st.text_input("Ketik KODE di atas:")
+                        # Menyembunyikan kotak input secara visual agar tidak diketik manual
+                            st.markdown("""
+                             <style>
+                            div[data-testid="stTextInput"] {
+                                display: none !important;
+                                visibility: hidden !important;
+                                height: 0px !important;
+                                margin: 0px !important;
+                                padding: 0px !important;
+                            }
+                            </style>
+                            """, unsafe_allow_html=True)
                         if ver_kode == "COCOK100":
                             if st.button("Kirim Absensi"):
                                 now = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
