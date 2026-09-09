@@ -104,9 +104,8 @@ def logout():
 # ==========================================
 # HALAMAN LOGIN UTAMA
 # ==========================================
-if st.session_state.role == "Pegawai":
-    st.button("⬅️ Kembali ke Halaman Awal", on_click=logout)
-    st.title("📍 Presensi GPS & Wajah")
+if st.session_state.role is None:
+    st.title("📍 Portal Presensi Terpadu")
     st.info("Selamat datang! Untuk merekam kehadiran Anda, silakan klik tombol di bawah ini.")
     
     # 1. Tombol Utama Pegawai
@@ -160,6 +159,7 @@ st.sidebar.write("---")
 # HAK AKSES 1: PEGAWAI
 # ==========================================
 if st.session_state.role == "Pegawai":
+    st.button("⬅️ Kembali ke Halaman Awal", on_click=logout)
     st.title("📍 Presensi GPS & Wajah")
     
     if st.session_state.employees.empty:
