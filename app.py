@@ -105,38 +105,39 @@ def logout():
 # HALAMAN LOGIN UTAMA
 # ==========================================
 if st.session_state.role is None:
-    # --- TAMPILAN UTAMA TENGAH (KHUSUS PEGAWAI) ---
     st.title("📍 Portal Presensi Terpadu")
     st.info("Selamat datang! Untuk merekam kehadiran Anda, silakan klik tombol di bawah ini.")
     
-    # Tombol besar dan utama untuk pegawai absen
+    # 1. Tombol Utama Pegawai
     if st.button("📸 Mulai Presensi Wajah & GPS", type="primary", use_container_width=True):
         st.session_state.role = "Pegawai"
         st.rerun()
 
-    # --- TAMPILAN SIDEBAR (KHUSUS PENGELOLA SISTEM) ---
-    st.sidebar.title("⚙️ Pengelola Sistem")
-    st.sidebar.write("Akses khusus pengelola:")
+    st.write("---")
     
-    # Tombol lipat untuk Admin
-    with st.sidebar.expander("🔑 Login Admin"):
-        pwd = st.text_input("Password Admin:", type="password")
-        if st.button("Masuk Admin", use_container_width=True):
-            if pwd == "admin123":
-                st.session_state.role = "Admin"
-                st.rerun()
-            else: 
-                st.error("Password Salah!")
-                
-    # Tombol lipat untuk Superadmin
-    with st.sidebar.expander("🛠️ Login Superadmin"):
-        pwd_super = st.text_input("Password Superadmin:", type="password")
-        if st.button("Masuk Superadmin", use_container_width=True):
-            if pwd_super == "superadmin123":
-                st.session_state.role = "Superadmin"
-                st.rerun()
-            else: 
-                st.error("Password Salah!")
+    # 2. Menu Lipat Pengelola (Admin & Superadmin)
+    st.caption("Akses khusus Pengelola Sistem:")
+    col_admin, col_super = st.columns(2)
+    
+    with col_admin:
+        with st.expander("🔑 Login Admin"):
+            pwd = st.text_input("Password Admin:", type="password", key="pwd_admin_main")
+            if st.button("Masuk Admin", use_container_width=True, key="btn_admin_main"):
+                if pwd == "admin123":
+                    st.session_state.role = "Admin"
+                    st.rerun()
+                else: 
+                    st.error("Password Salah!")
+                    
+    with col_super:
+        with st.expander("🛠️ Login Superadmin"):
+            pwd_super = st.text_input("Password Superadmin:", type="password", key="pwd_super_main")
+            if st.button("Masuk Superadmin", use_container_width=True, key="btn_super_main"):
+                if pwd_super == "superadmin123":
+                    st.session_state.role = "Superadmin"
+                    st.rerun()
+                else: 
+                    st.error("Password Salah!")
                 
     st.stop()
 
