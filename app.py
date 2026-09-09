@@ -226,7 +226,7 @@ if st.session_state.role == "Pegawai":
                         ver_kode = st.text_input("Ketik KODE di atas:")
                         # Menyembunyikan kotak input secara visual agar tidak diketik manual
                             st.markdown("""
-                             <style>
+                            <style>
                             div[data-testid="stTextInput"] {
                                 display: none !important;
                                 visibility: hidden !important;
@@ -235,7 +235,7 @@ if st.session_state.role == "Pegawai":
                                 padding: 0px !important;
                             }
                             </style>
-                            """, unsafe_allow_html=True)
+                        """, unsafe_allow_html=True)
                         if ver_kode == "COCOK100":
                             if st.button("Kirim Absensi"):
                                 now = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
