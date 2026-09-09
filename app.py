@@ -105,37 +105,39 @@ def logout():
 # HALAMAN LOGIN UTAMA
 # ==========================================
 if st.session_state.role is None:
-    col_kiri, col_kanan = st.columns([1.5, 1])
+    # --- TAMPILAN UTAMA TENGAH (KHUSUS PEGAWAI) ---
+    st.title("📍 Portal Presensi Terpadu")
+    st.info("Selamat datang! Untuk merekam kehadiran Anda, silakan klik tombol di bawah ini.")
     
-    with col_kiri:
-        st.title("🏫 Portal Absensi Sekolah")
-        st.info("Selamat datang di Sistem Presensi Digital. Silakan gunakan menu di sebelah kanan untuk masuk ke sistem sesuai dengan hak akses Anda.")
-        
-    with col_kanan:
-        st.markdown("### 🚪 Menu Login")
-        pilihan_login = st.selectbox("Login Sebagai:", ["Pilih...", "Pegawai", "Admin", "Superadmin"])
-        
-        if pilihan_login == "Pegawai":
-            if st.button("Masuk (Kamera Absensi)", use_container_width=True):
-                st.session_state.role = "Pegawai"
+    # Tombol besar dan utama untuk pegawai absen
+    if st.button("📸 Mulai Presensi Wajah & GPS", type="primary", use_container_width=True):
+        st.session_state.role = "Pegawai"
+        st.rerun()
+
+    # --- TAMPILAN SIDEBAR (KHUSUS PENGELOLA SISTEM) ---
+    st.sidebar.title("⚙️ Pengelola Sistem")
+    st.sidebar.write("Akses khusus pengelola:")
+    
+    # Tombol lipat untuk Admin
+    with st.sidebar.expander("🔑 Login Admin"):
+        pwd = st.text_input("Password Admin:", type="password")
+        if st.button("Masuk Admin", use_container_width=True):
+            if pwd == "admin123":
+                st.session_state.role = "Admin"
                 st.rerun()
-        elif pilihan_login == "Admin":
-            pwd = st.text_input("Password Admin:", type="password")
-            if st.button("Login", use_container_width=True):
-                if pwd == "admin123":
-                    st.session_state.role = "Admin"
-                    st.rerun()
-                else: 
-                    st.error("Password Salah!")
-        elif pilihan_login == "Superadmin":
-            pwd_super = st.text_input("Password Superadmin:", type="password")
-            if st.button("Login", use_container_width=True):
-                if pwd_super == "superadmin123":
-                    st.session_state.role = "Superadmin"
-                    st.rerun()
-                else: 
-                    st.error("Password Salah!")
-                    
+            else: 
+                st.error("Password Salah!")
+                
+    # Tombol lipat untuk Superadmin
+    with st.sidebar.expander("🛠️ Login Superadmin"):
+        pwd_super = st.text_input("Password Superadmin:", type="password")
+        if st.button("Masuk Superadmin", use_container_width=True):
+            if pwd_super == "superadmin123":
+                st.session_state.role = "Superadmin"
+                st.rerun()
+            else: 
+                st.error("Password Salah!")
+                
     st.stop()
 
 # ==========================================
