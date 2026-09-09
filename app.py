@@ -105,7 +105,6 @@ def logout():
 # HALAMAN LOGIN UTAMA
 # ==========================================
 if st.session_state.role is None:
-    # Membagi layar: kiri untuk teks sambutan (porsi 1.5) dan kanan untuk login (porsi 1)
     col_kiri, col_kanan = st.columns([1.5, 1])
     
     with col_kiri:
@@ -114,7 +113,7 @@ if st.session_state.role is None:
         
     with col_kanan:
         st.markdown("### 🚪 Menu Login")
-        pilihan_login = st.sidebar.selectbox("Login Sebagai:", ["Pilih...", "Pegawai", "Admin", "Superadmin"])
+        pilihan_login = st.selectbox("Login Sebagai:", ["Pilih...", "Pegawai", "Admin", "Superadmin"])
         
         if pilihan_login == "Pegawai":
             if st.button("Masuk (Kamera Absensi)", use_container_width=True):
@@ -126,14 +125,17 @@ if st.session_state.role is None:
                 if pwd == "admin123":
                     st.session_state.role = "Admin"
                     st.rerun()
-                else: st.error("Password Salah!")
+                else: 
+                    st.error("Password Salah!")
         elif pilihan_login == "Superadmin":
             pwd_super = st.text_input("Password Superadmin:", type="password")
             if st.button("Login", use_container_width=True):
                 if pwd_super == "superadmin123":
                     st.session_state.role = "Superadmin"
                     st.rerun()
-                else: st.error("Password Salah!")
+                else: 
+                    st.error("Password Salah!")
+                    
     st.stop()
 
 # ==========================================
