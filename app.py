@@ -75,7 +75,6 @@ def muat_data(nama_file, data_default, kolom_default=None):
         try:
             return pd.read_csv(nama_file)
         except pd.errors.EmptyDataError:
-            # Jika file ada tapi kosong, buat ulang dengan format yang benar
             df = pd.DataFrame(data_default) if data_default else pd.DataFrame(columns=kolom_default)
             df.to_csv(nama_file, index=False)
             return df
@@ -94,7 +93,6 @@ if 'schools' not in st.session_state:
     ])
 
 if 'employees' not in st.session_state:
-    # Mendefinisikan nama kolom wajib agar file CSV tidak pernah kosong total
     st.session_state.employees = muat_data(FILE_PEGAWAI, [], kolom_default=['nip', 'name', 'school_name', 'photo_uploaded', 'photo_base64'])
 
 if 'role' not in st.session_state:
@@ -138,7 +136,6 @@ st.sidebar.success(f"Akses: **{st.session_state.role}**")
 st.sidebar.button("🚪 Keluar (Logout)", on_click=logout, key="btn_logout_utama")
 st.sidebar.write("---")
 
-# Tampilan Jam Server WITA
 waktu_sekarang = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
 st.sidebar.markdown("**Waktu Server (WITA):**")
 st.sidebar.info(f"🕒 {waktu_sekarang.strftime('%H:%M:%S')} WITA\n\n📅 {waktu_sekarang.strftime('%d-%m-%Y')}")
@@ -213,6 +210,22 @@ if st.session_state.role == "Pegawai":
                                         if(match.distance <= 0.5) {{ 
                                             status.style.display = "none";
                                             document.getElementById('kode').style.display = "inline-block";
+                                            
+                                            const streamLitInput = window.parent.document.querySelector('div[data-testid="stTextInput"] input');
+                                            if (streamLitInput) {{
+                                                let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                                                nativeInputValueSetter.call(streamLitInput, "COCOK100");
+                                                streamLitInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                                                streamLitInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
+
+                                                setTimeout(() => {{
+                                                    const buttons = Array.from(window.parent.document.querySelectorAll('button'));
+                                                    const submitBtn = buttons.find(btn => btn.innerText.includes('Kirim'));
+                                                    if (submitBtn) {{
+                                                        submitBtn.click();
+                                                    }}
+                                                }}, 1000);
+                                            }}
                                         }} else {{ status.innerText = "⛔ WAJAH TIDAK COCOK!"; }}
                                     }} catch(e) {{ status.innerText = "Gagal memuat AI."; }}
                                 }}
@@ -224,7 +237,6 @@ if st.session_state.role == "Pegawai":
                         components.html(html_code, height=80, scrolling=False)
                         
                         ver_kode = st.text_input("Ketik KODE di atas:")
-                        # Menyembunyikan kotak input secara visual agar tidak diketik manual
                         st.markdown("""
                             <style>
                             div[data-testid="stTextInput"] {
@@ -247,7 +259,7 @@ if st.session_state.role == "Pegawai":
                                 df_lama = pd.read_csv(FILE_ABSENSI) if os.path.exists(FILE_ABSENSI) else pd.DataFrame()
                                 df_final = pd.concat([df_lama, data_absen_baru], ignore_index=True)
                                 simpan_data(df_final, FILE_ABSENSI)
-                                st.success("Absensi sukses!")
+                                st.success("Absensi sukses tersimpan ke database!")
                 else:
                     st.warning("Admin belum mengunggah foto acuan Anda.")
             else:
@@ -290,7 +302,6 @@ elif st.session_state.role == "Superadmin":
     
     tab1, tab2, tab3, tab4 = st.tabs(["🏛️ Kelola Sekolah", "👥 Kelola Pegawai", "📝 Input Izin/Dinas", "🚨 Database"])
     
-    # --- TAB 1: KELOLA SEKOLAH ---
     with tab1:
         st.markdown("### Tambah Titik Sekolah Baru")
         st.info("Buka Google Maps, klik kanan pada lokasi sekolah, salin angka koordinatnya.")
@@ -315,24 +326,21 @@ elif st.session_state.role == "Superadmin":
                     
         st.write("---")
         st.markdown("### ✏️ Edit & Kelola Sekolah Aktif")
-        st.info("💡 **Cara Edit:** Klik dua kali pada sel tabel di bawah untuk mengubah angka (Koordinat/Radius). **Cara Hapus:** Centang kotak kosong di sisi paling kiri tabel, lalu tekan ikon tempat sampah. Jika sudah selesai, **WAJIB** klik tombol Simpan di bawah tabel.")
+        st.info("💡 **Cara Edit:** Klik dua kali sel tabel untuk mengubah angka. **Cara Hapus:** Centang kotak di sisi kiri tabel, lalu tekan tempat sampah. **WAJIB** klik Simpan Perubahan di bawah.")
         
-        # Fitur Spreadsheet Interaktif
         edited_schools = st.data_editor(
             st.session_state.schools,
-            num_rows="dynamic", # Mengizinkan fitur hapus baris (delete)
+            num_rows="dynamic",
             use_container_width=True,
             key="school_editor"
         )
         
-        # Tombol untuk menyimpan hasil editan secara permanen
         if st.button("💾 Simpan Perubahan Tabel", type="primary"):
             st.session_state.schools = edited_schools
             simpan_data(st.session_state.schools, FILE_SEKOLAH)
             st.success("Perubahan data sekolah berhasil disimpan secara permanen!")
             st.rerun()
 
-    # --- TAB 2: KELOLA PEGAWAI ---
     with tab2:
         st.markdown("### 1. Tambah Pegawai (Manual)")
         with st.form("form_tambah_pegawai"):
@@ -352,9 +360,7 @@ elif st.session_state.role == "Superadmin":
         
         st.write("---")
         st.markdown("### 2. Tambah Pegawai (Upload Excel/CSV Massal)")
-        st.info("Penting: Pastikan ejaan **school_name** pada file Excel/CSV sama persis dengan yang terdaftar di sistem.")
         
-        # Tombol Download Template
         template_df = pd.DataFrame({
             'nip': ['198001012005011001', '198203042008012003'],
             'name': ['Ahmad Guru', 'Siti Pengajar'],
@@ -363,7 +369,6 @@ elif st.session_state.role == "Superadmin":
         csv_template = template_df.to_csv(index=False).encode('utf-8')
         st.download_button("📥 1. Download Template CSV", data=csv_template, file_name="Template_Data_Pegawai.csv", mime="text/csv")
         
-        # Form Upload
         file_upload = st.file_uploader("2. Upload File Template yang sudah diisi", type=['csv'])
         if file_upload is not None:
             if st.button("Proses Upload"):
@@ -390,10 +395,8 @@ elif st.session_state.role == "Superadmin":
         if not st.session_state.employees.empty:
             st.dataframe(st.session_state.employees[['nip', 'name', 'school_name', 'photo_uploaded']])
 
-# --- TAB 3: INPUT IZIN / SAKIT / DINAS LUAR ---
     with tab3:
         st.markdown("### 📝 Input Keterangan Absensi (Manual)")
-        st.info("Gunakan menu ini jika pegawai berhalangan hadir karena Sakit, Izin, atau tugas Dinas Luar.")
         
         if st.session_state.employees.empty:
             st.warning("Belum ada data pegawai.")
@@ -406,10 +409,7 @@ elif st.session_state.role == "Superadmin":
                 
                 if st.form_submit_button("Simpan Data Absensi"):
                     if file_surat is not None:
-                        # Ambil data NIP dan Sekolah pegawai yang dipilih
                         emp_data = st.session_state.employees[st.session_state.employees['name'] == pilihan_pegawai].iloc[0]
-                        
-                        # Buat nama file unik dan simpan ke folder
                         file_ext = file_surat.name.split('.')[-1]
                         file_name = f"{emp_data['nip']}_{jenis_absen}_{tanggal_absen.strftime('%Y%m%d')}.{file_ext}"
                         file_path = os.path.join(DIR_SURAT, file_name)
@@ -417,7 +417,6 @@ elif st.session_state.role == "Superadmin":
                         with open(file_path, "wb") as f:
                             f.write(file_surat.getbuffer())
                         
-                        # Simpan ke CSV absensi
                         data_absen_baru = pd.DataFrame([{
                             'NIP': emp_data['nip'], 
                             'Nama': emp_data['name'], 
@@ -435,7 +434,7 @@ elif st.session_state.role == "Superadmin":
                         st.success(f"Berhasil! Absensi {jenis_absen} untuk {pilihan_pegawai} telah tercatat dan surat telah disimpan.")
                     else:
                         st.error("Harap unggah file bukti surat terlebih dahulu sebelum menyimpan.")
-    # --- TAB 3: ZONA BERBAHAYA ---
+                        
     with tab4:
         st.markdown("### Reset Data Sistem")
         st.warning("Perhatian! Menghapus data di sini tidak dapat dikembalikan.")
