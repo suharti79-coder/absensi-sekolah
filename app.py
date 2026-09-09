@@ -114,7 +114,7 @@ if st.session_state.role is None:
         
     with col_kanan:
         st.markdown("### 🚪 Menu Login")
-        pilihan_login = st.selectbox("Login Sebagai:", ["Pilih...", "Pegawai", "Admin", "Superadmin"])
+        pilihan_login = st.sidebar.selectbox("Login Sebagai:", ["Pilih...", "Pegawai", "Admin", "Superadmin"])
         
         if pilihan_login == "Pegawai":
             if st.button("Masuk (Kamera Absensi)", use_container_width=True):
