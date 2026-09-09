@@ -104,8 +104,9 @@ def logout():
 # ==========================================
 # HALAMAN LOGIN UTAMA
 # ==========================================
-if st.session_state.role is None:
-    st.title("📍 Portal Presensi Terpadu")
+if st.session_state.role == "Pegawai":
+    st.button("⬅️ Kembali ke Halaman Awal", on_click=logout)
+    st.title("📍 Presensi GPS & Wajah")
     st.info("Selamat datang! Untuk merekam kehadiran Anda, silakan klik tombol di bawah ini.")
     
     # 1. Tombol Utama Pegawai
@@ -284,7 +285,11 @@ if st.session_state.role == "Pegawai":
 # HAK AKSES 2: ADMIN
 # ==========================================
 elif st.session_state.role == "Admin":
-    st.title("🔐 Dashboard Admin")
+    col_judul, col_tombol = st.columns([3, 1])
+    with col_judul:
+        st.title("🔐 Dashboard Admin")
+    with col_tombol:
+        st.button("🚪 Logout", on_click=logout, use_container_width=True)
     
     if st.session_state.employees.empty:
          st.warning("Belum ada data pegawai. Minta Superadmin menambah pegawai terlebih dahulu.")
@@ -311,7 +316,11 @@ elif st.session_state.role == "Admin":
 # HAK AKSES 3: SUPERADMIN
 # ==========================================
 elif st.session_state.role == "Superadmin":
-    st.title("🛠️ Dashboard Superadmin")
+    col_judul, col_tombol = st.columns([3, 1])
+    with col_judul:
+        st.title("🛠️ Dashboard Superadmin")
+    with col_tombol:
+        st.button("🚪 Logout", on_click=logout, use_container_width=True)
     
     tab1, tab2, tab3, tab4 = st.tabs(["🏛️ Kelola Sekolah", "👥 Kelola Pegawai", "📝 Input Izin/Dinas", "🚨 Database"])
     
