@@ -10,6 +10,7 @@ import streamlit.components.v1 as components
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Sistem Absensi Sekolah Cabdis Wil IV", page_icon="🏫", layout="centered")
+
 # --- KUSTOMISASI TAMPILAN (CUSTOM CSS) ---
 st.markdown("""
     <style>
@@ -17,64 +18,41 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
     html, body, [class*="css"] {
-        font-family: 'Poppins', sans-serif;
+        font-family: 'Poppins', sans-serif !important;
     }
 
-    # Ubah Warna Latar Belakang Aplikasi #
-    .stApp {
-        background-color: #F8FAFC;
-    }
-
-    # Sembunyikan Header & Footer Bawaan Streamlit #
+    # Sembunyikan Header & Footer Bawaan Streamlit
     header {visibility: hidden;}
     footer {visibility: hidden;}
-    #MainMenu {visibility: hidden;}
 
-    # Styling Sidebar #
-    [data-testid="stSidebar"] {
-        background-color: #1E293B;
-        color: #FFFFFF;
-    }
-    [data-testid="stSidebar"] * {
-        color: #F1F5F9 !important;
-    }
-
-    # Styling Kartu / Container #
+    # Styling Kartu / Container
     .stForm, div[data-testid="stExpander"] {
         background-color: #FFFFFF;
         padding: 24px;
-        border-radius: 16px;
-        box-shadow: 0px 10px 25px rgba(0, 0, 0, 0.05);
+        border-radius: 12px;
+        box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.05);
         border: 1px solid #E2E8F0;
     }
 
-    # Styling Tombol (Button) #
-    .stButton > button {
-        width: 100%;
-        background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    # Styling Semua Tombol
+    div.stButton > button {
+        background-color: #2563EB !important; /* Warna Biru */
         color: white !important;
-        font-weight: 600;
-        padding: 12px 24px;
-        border-radius: 10px;
-        border: none;
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
-        transition: all 0.3s ease;
-    }
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
-    }
-
-    # Styling Input Field #
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] {
+        font-weight: 600 !important;
         border-radius: 8px !important;
-        border: 1px solid #CBD5E1 !important;
-    }
-
-    # Styling Alert Boxes (Success, Info, Warning) #
-    .stAlert {
-        border-radius: 12px !important;
         border: none !important;
+        transition: 0.3s;
+    }
+    
+    div.stButton > button:hover {
+        background-color: #1D4ED8 !important; /* Warna Biru Gelap saat disorot */
+        box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+    }
+    
+    # Styling Sidebar agar rapi dan teks tetap gelap
+    [data-testid="stSidebar"] {
+        background-color: #F8FAFC !important;
+        border-right: 1px solid #E2E8F0;
     }
     </style>
 """, unsafe_allow_html=True)
