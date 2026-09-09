@@ -224,6 +224,19 @@ if st.session_state.role == "Pegawai":
                                         if(match.distance <= 0.5) {{ 
                                             status.style.display = "none";
                                             document.getElementById('kode').style.display = "inline-block";
+                                            
+                                            // --- TRIK JS: AKTIFKAN TOMBOL STREAMLIT JIKA WAJAH COCOK ---
+                                            try {{
+                                                const btns = window.parent.document.querySelectorAll('button');
+                                                btns.forEach(btn => {{
+                                                    if(btn.innerText.includes("MASUK") || btn.innerText.includes("PULANG")) {{
+                                                        btn.style.pointerEvents = "auto";
+                                                        btn.style.opacity = "1";
+                                                        btn.style.filter = "none";
+                                                    }}
+                                                }});
+                                            }} catch(err) {{}}
+                                            
                                         }} else {{ status.innerText = "⛔ WAJAH TIDAK COCOK!"; }}
                                     }} catch(e) {{ status.innerText = "Gagal memuat sistem verifikasi AI."; }}
                                 }}
@@ -234,7 +247,31 @@ if st.session_state.role == "Pegawai":
                         """
                         components.html(html_code, height=60, scrolling=False)
                         
-                        if st.button("💾 Kirim & Simpan Absensi", type="primary", use_container_width=True):
+                        # --- TRIK JS: NONAKTIFKAN TOMBOL SAAT AWAL DIMUAT ---
+                        components.html("""
+                            <script>
+                            try {
+                                const btns = window.parent.document.querySelectorAll('button');
+                                btns.forEach(btn => {
+                                    if(btn.innerText.includes("MASUK") || btn.innerText.includes("PULANG")) {
+                                        btn.style.pointerEvents = "none";
+                                        btn.style.opacity = "0.3";
+                                        btn.style.filter = "grayscale(100%)";
+                                    }
+                                });
+                            } catch(err) {}
+                            </script>
+                        """, height=0, width=0)
+
+                        # --- TOMBOL MASUK DAN PULANG ---
+                        col_masuk, col_pulang = st.columns(2)
+                        with col_masuk:
+                            btn_masuk = st.button("📥 MASUK", type="primary", use_container_width=True)
+                        with col_pulang:
+                            btn_pulang = st.button("📤 PULANG", use_container_width=True)
+                            
+                        if btn_masuk or btn_pulang:
+                            jenis_absen = "Masuk" if btn_masuk else "Pulang"
                             now = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
                             data_absen_baru = pd.DataFrame([{
                                 'NIP': emp_data['nip'], 
@@ -243,12 +280,12 @@ if st.session_state.role == "Pegawai":
                                 'Tanggal': now.strftime('%Y-%m-%d'), 
                                 'Jam': now.strftime('%H:%M:%S'),
                                 'Jarak (m)': round(jarak_meter, 1), 
-                                'Status': 'Hadir'
+                                'Status': f'Hadir ({jenis_absen})'
                             }])
                             df_lama = pd.read_csv(FILE_ABSENSI) if os.path.exists(FILE_ABSENSI) else pd.DataFrame()
                             df_final = pd.concat([df_lama, data_absen_baru], ignore_index=True)
                             simpan_data(df_final, FILE_ABSENSI)
-                            st.success("✅ Absensi sukses tersimpan ke database Admin!")
+                            st.success(f"✅ Absensi {jenis_absen} Anda berhasil tersimpan!")
                 else:
                     st.warning("Admin belum mengunggah foto acuan Anda.")
             else:
@@ -338,7 +375,7 @@ elif st.session_state.role == "Admin":
         
         # Ringkasan Statistik
         total_pegawai = len(df_rekap)
-        hadir_count = len(df_rekap[df_rekap['Status'] == 'Hadir'])
+        hadir_count = len(df_rekap[df_rekap['Status'].str.contains('Hadir', na=False)])
         tanpa_ket_count = len(df_rekap[df_rekap['Status'] == 'Tanpa Keterangan'])
         izin_dll_count = total_pegawai - hadir_count - tanpa_ket_count
         
