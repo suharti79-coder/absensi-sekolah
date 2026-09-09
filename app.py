@@ -234,7 +234,6 @@ if st.session_state.role == "Pegawai":
                         """
                         components.html(html_code, height=60, scrolling=False)
                         
-                        # Tombol Simpan Absensi Resmi
                         if st.button("💾 Kirim & Simpan Absensi", type="primary", use_container_width=True):
                             now = datetime.datetime.now(pytz.timezone('Asia/Makassar'))
                             data_absen_baru = pd.DataFrame([{
@@ -282,16 +281,78 @@ elif st.session_state.role == "Admin":
             simpan_data(st.session_state.employees, FILE_PEGAWAI)
             st.success("Foto dikunci dan disimpan secara permanen!")
 
-    st.markdown("### 2. Laporan Absensi")
-    if os.path.exists(FILE_ABSENSI):
-        df = pd.read_csv(FILE_ABSENSI)
-        if not df.empty:
-            st.dataframe(df, use_container_width=True)
-            st.download_button("📥 Download Laporan (CSV)", data=df.to_csv(index=False).encode('utf-8'), file_name="Rekap_Absensi.csv")
-        else:
-            st.info("Belum ada data absensi yang masuk.")
+    st.markdown("### 2. Laporan & Rekap Absensi")
+    
+    # Filter Rekapitulasi
+    col_tgl, col_sch = st.columns(2)
+    with col_tgl:
+        tgl_pilihan = st.date_input("Pilih Tanggal Rekap:", datetime.datetime.now(pytz.timezone('Asia/Makassar')).date())
+    with col_sch:
+        opsi_sekolah = ["Semua Sekolah"] + st.session_state.schools['school_name'].tolist()
+        sekolah_pilihan = st.selectbox("Filter Sekolah:", opsi_sekolah)
+    
+    df_emp = st.session_state.employees.copy()
+    if sekolah_pilihan != "Semua Sekolah":
+        df_emp = df_emp[df_emp['school_name'] == sekolah_pilihan]
+        
+    if df_emp.empty:
+        st.warning(f"Tidak ada pegawai terdaftar pada unit {sekolah_pilihan}.")
     else:
-        st.info("Belum ada data absensi yang masuk.")
+        # Memuat database absensi
+        df_absen_raw = pd.read_csv(FILE_ABSENSI) if os.path.exists(FILE_ABSENSI) else pd.DataFrame(columns=['NIP', 'Nama', 'Sekolah', 'Tanggal', 'Jam', 'Jarak (m)', 'Status'])
+        
+        df_emp['nip'] = df_emp['nip'].astype(str)
+        if not df_absen_raw.empty and 'NIP' in df_absen_raw.columns:
+            df_absen_raw['NIP'] = df_absen_raw['NIP'].astype(str)
+            
+        tgl_str = tgl_pilihan.strftime('%Y-%m-%d')
+        df_absen_tgl = df_absen_raw[df_absen_raw['Tanggal'] == tgl_str] if not df_absen_raw.empty else pd.DataFrame()
+        
+        # Penggabungan data pegawai dengan data kehadiran
+        if not df_absen_tgl.empty:
+            df_rekap = pd.merge(
+                df_emp[['nip', 'name', 'school_name']],
+                df_absen_tgl[['NIP', 'Jam', 'Jarak (m)', 'Status']],
+                left_on='nip',
+                right_on='NIP',
+                how='left'
+            )
+        else:
+            df_rekap = df_emp[['nip', 'name', 'school_name']].copy()
+            df_rekap['Jam'] = '-'
+            df_rekap['Jarak (m)'] = '-'
+            df_rekap['Status'] = None
+            
+        df_rekap['Tanggal'] = tgl_str
+        df_rekap['Jam'] = df_rekap['Jam'].fillna('-')
+        df_rekap['Jarak (m)'] = df_rekap['Jarak (m)'].fillna('-')
+        df_rekap['Status'] = df_rekap['Status'].fillna('Tanpa Keterangan')
+        
+        df_rekap = df_rekap.rename(columns={
+            'nip': 'NIP',
+            'name': 'Nama',
+            'school_name': 'Sekolah'
+        })[['NIP', 'Nama', 'Sekolah', 'Tanggal', 'Jam', 'Jarak (m)', 'Status']]
+        
+        # Ringkasan Statistik
+        total_pegawai = len(df_rekap)
+        hadir_count = len(df_rekap[df_rekap['Status'] == 'Hadir'])
+        tanpa_ket_count = len(df_rekap[df_rekap['Status'] == 'Tanpa Keterangan'])
+        izin_dll_count = total_pegawai - hadir_count - tanpa_ket_count
+        
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Pegawai", total_pegawai)
+        m2.metric("Hadir", hadir_count)
+        m3.metric("Izin/Sakit/Cuti/Dinas", izin_dll_count)
+        m4.metric("Tanpa Keterangan", tanpa_ket_count)
+        
+        st.dataframe(df_rekap, use_container_width=True)
+        st.download_button(
+            "📥 Download Rekap Absensi (CSV)",
+            data=df_rekap.to_csv(index=False).encode('utf-8'),
+            file_name=f"Rekap_Absensi_{sekolah_pilihan.replace(' ', '_')}_{tgl_str}.csv",
+            mime="text/csv"
+        )
 
 # ==========================================
 # HAK AKSES 3: SUPERADMIN
@@ -406,7 +467,7 @@ elif st.session_state.role == "Superadmin":
         else:
             with st.form("form_izin"):
                 pilihan_pegawai = st.selectbox("Pilih Pegawai:", st.session_state.employees['name'].tolist())
-                jenis_absen = st.selectbox("Status Kehadiran:", ["Sakit", "Izin", "Dinas Luar"])
+                jenis_absen = st.selectbox("Status Kehadiran:", ["Sakit", "Izin", "Cuti", "Dinas Luar"])
                 tanggal_absen = st.date_input("Tanggal Keterangan")
                 file_surat = st.file_uploader("Upload Bukti Surat (PDF/JPG/PNG)", type=['pdf', 'jpg', 'jpeg', 'png'])
                 
